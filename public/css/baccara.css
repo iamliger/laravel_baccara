@@ -1,0 +1,583 @@
+.main-layout {
+    display: flex;
+    min-height: 100vh;
+}
+/* Level 2 (사이드바가 있을 때) 레이아웃 */
+.layout-with-sidebar .sidebar {
+    display: flex; /* 사이드바 보이기 */
+}
+.layout-with-sidebar .main-content-area {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* Level 2가 아닐 때 (사이드바가 없을 때) 레이아웃 */
+.layout-full .sidebar {
+    display: none; /* 사이드바 숨기기 */
+}
+.layout-full .main-content-area {
+    width: 100%; /* 전체 너비 차지 */
+}
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 4rem; /* 64px */
+    flex-shrink: 0;
+    background-color: #1f2937; /* gray-800 */
+    border-right: 1px solid #374151; /* gray-700 */
+}
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 4rem; /* 64px */
+    color: #ffffff;
+}
+.sidebar-brand i {
+    font-size: 1.75rem; /* 28px */
+}
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem; /* 8px */
+    padding: 1rem 0.75rem; /* py-4 px-3 */
+    flex-grow: 1;
+}
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem; /* p-2 */
+    border-radius: 0.375rem; /* rounded-md */
+    color: #9ca3af; /* text-gray-400 */
+    transition: background-color 0.2s, color 0.2s;
+}
+.sidebar-link:hover {
+    background-color: #374151; /* hover:bg-gray-700 */
+    color: #ffffff; /* hover:text-white */
+}
+.sidebar-link.active {
+    background-color: #4f46e5; /* bg-indigo-600 */
+    color: #ffffff;
+}
+.sidebar-link i {
+    font-size: 1.25rem; /* 20px */
+}
+.sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem 0.75rem;
+    flex-shrink: 0;
+    border-top: 1px solid #374151; /* gray-700 */
+}
+.main-content-area {
+    flex-grow: 1;
+    overflow-y: auto; /* 콘텐츠가 길어질 경우를 대비 */
+}
+
+/* public/css/baccara.css */
+:root {
+    --main-cell-size: 2rem;
+    --history-cell-size: 1.5rem;
+    --main-icon-size: 1.625rem; /* 26px, 아이콘 크기 미세 조정 */
+    --history-icon-size: 1.125rem; /* 18px, 히스토리 아이콘 크기 */
+
+    /* 색상 변수 */
+    --grid-line-color: #374151;
+    --grid-bg-color: #1f2937;
+    --player-color: #0d6efd; /* 더 선명한 파란색 */
+    --player-gradient-start: #409cff;
+    --player-color-light: #60a5fa;
+    --banker-color: #dc3545; /* 더 선명한 빨간색 */
+    --banker-gradient-start: #ff707e;
+    --banker-color-light: #f87171;
+    --system-color: #a5b4fc;
+    --console-bg-color: #262d3a;
+    --console-border-color: #4b5563;
+    --recommend-border-color: #f59e0b;
+}
+
+/* 전체 레이아웃 컨테이너 */
+.baccara-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: #111827;
+    color: #f3f4f6;
+}
+
+/* 예측 헤더 스타일 */
+.prediction-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #1f2937;
+    border-bottom: 1px solid #374151;
+    min-height: 48px;
+    font-size: 0.875rem;
+}
+.prediction-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #d1d5db;
+}
+.prediction-item .baccarat-circle {
+    width: 1rem;
+    height: 1rem;
+    font-size: 0.7rem;
+    border: none;
+    box-shadow: none;
+}
+
+/* 메인 콘텐츠 영역 */
+.baccara-main-content {
+    flex-grow: 1;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+/* 그리드 배경 */
+.checkerboard-bg {
+    background-image: linear-gradient(
+            to right,
+            var(--grid-line-color) 1px,
+            transparent 1px
+        ),
+        linear-gradient(to bottom, var(--grid-line-color) 1px, transparent 1px);
+    background-color: var(--grid-bg-color);
+}
+.main-grid-bg {
+    background-size: var(--main-cell-size) var(--main-cell-size);
+}
+.history-grid-bg {
+    background-size: var(--history-cell-size) var(--history-cell-size);
+}
+
+/* 그리드 내부 아이템 정렬 */
+#roadmap-grid,
+[id^="history-grid-"] {
+    display: grid;
+    grid-auto-flow: column;
+}
+#roadmap-grid {
+    grid-auto-columns: var(--main-cell-size);
+}
+[id^="history-grid-"] {
+    grid-auto-columns: var(--history-cell-size);
+}
+
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+/* ★★★ 아이콘 디자인 (이미지와 동일하게 입체감 적용) ★★★ */
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+.grid-item-circle,
+.baccarat-circle {
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2),
+        inset 0 -1px 1px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.grid-item-wrapper {
+    width: var(--main-cell-size);
+    height: var(--main-cell-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.grid-item-wrapper .baccarat-circle {
+    width: var(--main-icon-size);
+    height: var(--main-icon-size);
+    font-size: 0.8rem;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+}
+.history-item-wrapper {
+    width: var(--history-icon-size);
+    height: var(--history-icon-size);
+    font-size: 0.7rem;
+    border: 1.5px solid rgba(0, 0, 0, 0.2);
+}
+.baccarat-circle.player,
+.grid-item-player {
+    background-image: radial-gradient(
+        circle at 50% 40%,
+        var(--player-gradient-start),
+        var(--player-color)
+    );
+}
+.baccarat-circle.banker,
+.grid-item-banker {
+    background-image: radial-gradient(
+        circle at 50% 40%,
+        var(--banker-gradient-start),
+        var(--banker-color)
+    );
+}
+
+/* 콘솔 박스 디자인 */
+.console-box-container {
+    margin-top: 1rem;
+    position: relative;
+}
+
+.console-box {
+    width: 100%;
+    background-color: var(--console-bg-color);
+    border: 1px solid var(--console-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    padding-top: 2.75rem; /* 버튼들을 위한 충분한 공간 확보 */
+    height: 150px;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: #d1d5db;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#view-toggle-btn {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    z-index: 10;
+}
+.toggle-view.hidden {
+    display: none;
+}
+.console-message {
+    padding: 0.4rem 0.65rem;
+    border-left-width: 3px;
+    border-color: transparent; /* 기본은 투명 */
+    background-color: rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* 아이콘과 텍스트 사이 간격 */
+}
+.console-message.type-recommendation .baccarat-circle {
+    width: 1rem !important;
+    height: 1rem !important;
+    font-size: 0.7rem !important;
+    background-image: none !important;
+    color: white !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+.console-message.type-recommendation .baccarat-circle.player {
+    background-color: var(--player-color) !important;
+}
+.console-message.type-recommendation .baccarat-circle.banker {
+    background-color: var(--banker-color) !important;
+}
+.console-message.type-system {
+    border-color: var(--system-color);
+    color: var(--system-color);
+    opacity: 0.9;
+}
+.console-message.type-cancel {
+    border-color: #9ca3af;
+    color: #9ca3af;
+}
+
+/* 스크롤바 숨기기 */
+#main-roadmap-container,
+[id^="history-box-"] {
+    /* Firefox */
+    scrollbar-width: none;
+    /* IE, Edge */
+    -ms-overflow-style: none;
+}
+
+#main-roadmap-container::-webkit-scrollbar,
+[id^="history-box-"]::-webkit-scrollbar {
+    /* Chrome, Safari, Opera */
+    display: none;
+}
+
+/* Webkit 기반 브라우저 (Chrome, Safari, Edge) */
+.console-box::-webkit-scrollbar {
+    width: 8px; /* 스크롤바의 너비 */
+}
+
+.console-box::-webkit-scrollbar-track {
+    background: transparent; /* 트랙 배경은 투명하게 */
+}
+
+.console-box::-webkit-scrollbar-thumb {
+    background-color: #4b5563; /* 스크롤바 막대 색상 (gray-600) */
+    border-radius: 4px; /* 스크롤바 막대 둥글게 */
+    /* 배경색과 동일한 색상의 테두리를 주어 실제보다 얇아보이는 효과 */
+    border: 2px solid var(--console-bg-color); 
+}
+
+.console-box::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280; /* 마우스 오버 시 색상 (gray-500) */
+}
+
+
+/* Firefox 브라우저 */
+.console-box {
+    scrollbar-width: thin; /* 스크롤바를 얇게 */
+    scrollbar-color: #4b5563 transparent; /* 막대 색상, 트랙 색상 */
+}
+
+
+
+/* 로직 버튼 그룹 스타일 */
+.logic-btn-group {
+    display: inline-flex;
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+.logic-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 1rem;
+    border: 1px solid #4b5563;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+.logic-btn:not(:first-child) {
+    margin-left: -1px;
+}
+.logic-btn:first-child {
+    border-top-left-radius: 0.375rem;
+    border-bottom-left-radius: 0.375rem;
+}
+.logic-btn:last-child {
+    border-top-right-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+}
+.logic-btn {
+    background-color: #374151;
+    color: #d1d5db;
+}
+.logic-btn:hover {
+    background-color: #4b5563;
+}
+.logic-btn[aria-checked="true"] {
+    z-index: 10;
+    background-color: #4f46e5;
+    color: #ffffff;
+}
+.logic-btn[aria-checked="true"]:hover {
+    background-color: #4338ca;
+}
+
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+/* ★★★ 환경설정 모달 및 토글 스위치 스타일 (새로 추가됨) ★★★ */
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.7);
+    transition: opacity 0.3s ease;
+}
+.modal-overlay.hidden {
+    display: none;
+}
+.modal-box {
+    width: 100%;
+    max-width: 28rem;
+    border-radius: 0.5rem;
+    background-color: #1f2937;
+    padding: 1.5rem;
+    text-align: left;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    transition: all 0.3s ease;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #4b5563;
+    padding-bottom: 0.75rem;
+}
+.modal-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #f3f4f6;
+}
+.modal-close-btn {
+    padding: 0.25rem;
+    border-radius: 0.375rem;
+    color: #9ca3af;
+}
+.modal-close-btn:hover {
+    background-color: #374151;
+    color: #ffffff;
+}
+.modal-body {
+    margin-top: 1rem;
+}
+.modal-footer {
+    margin-top: 1.5rem; /* mt-6 */
+    padding-top: 1rem; /* pt-4 */
+    border-top: 1px solid #4b5563; /* border-gray-600 */
+    display: flex;
+    justify-content: flex-end; /* 오른쪽 정렬 */
+    gap: 0.75rem; /* space-x-3 */
+}
+.modal-btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 1rem; /* py-2 px-4 */
+    border-radius: 0.375rem; /* rounded-md */
+    font-size: 0.875rem; /* text-sm */
+    font-weight: 500; /* font-medium */
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: background-color 0.2s;
+}
+.modal-btn-secondary {
+    background-color: #4b5563; /* bg-gray-600 */
+    color: #e5e7eb; /* text-gray-200 */
+}
+.modal-btn-secondary:hover {
+    background-color: #6b7280; /* hover:bg-gray-500 */
+}
+.modal-btn-primary {
+    background-color: #4f46e5; /* bg-indigo-600 */
+    color: #ffffff; /* text-white */
+}
+.modal-btn-primary:hover {
+    background-color: #4338ca; /* hover:bg-indigo-700 */
+}
+
+.modal-input {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 1px solid #4b5563; /* gray-600 */
+    background-color: #374151; /* gray-700 */
+    padding: 0.5rem 0.75rem;
+    color: #f3f4f6; /* gray-100 */
+}
+.modal-input:focus {
+    border-color: #4f46e5; /* indigo-600 */
+    outline: none;
+    box-shadow: 0 0 0 2px #4f46e5;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.setting-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #d1d5db;
+}
+.setting-toggle {
+    position: relative;
+    display: inline-flex;
+    height: 1.5rem;
+    width: 2.75rem;
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-color: #4b5563;
+    transition: background-color 0.2s ease-in-out;
+}
+.setting-toggle[aria-checked="true"] {
+    background-color: #4f46e5;
+}
+.setting-toggle-knob {
+    pointer-events: none;
+    display: inline-block;
+    height: 1.25rem;
+    width: 1.25rem;
+    transform: translateX(0);
+    border-radius: 9999px;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease-in-out;
+}
+.setting-toggle[aria-checked="true"] .setting-toggle-knob {
+    transform: translateX(1.25rem);
+}
+
+.toast-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    padding: 1rem;
+    pointer-events: none; /* 오버레이 자체는 클릭되지 않도록 */
+}
+.toast-container {
+    margin: 0 auto; /* 기본 중앙 정렬 */
+    pointer-events: auto; /* 컨테이너는 클릭 가능 */
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 0.5rem;
+    background-color: rgba(31, 41, 55, 0.95); /* bg-gray-800/95 */
+    padding: 1rem 1.5rem;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+        0 4px 6px -4px rgb(0 0 0 / 0.1);
+    border: 1px solid rgba(75, 85, 99, 0.8);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.toast-container.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.toast-close-btn {
+    flex-shrink: 0;
+    padding: 0.25rem;
+    border-radius: 9999px;
+    background-color: rgba(75, 85, 99, 0.5);
+    color: #d1d5db;
+}
+.toast-close-btn:hover {
+    background-color: rgba(107, 114, 128, 0.5);
+}
+/* 토스트 위치 */
+.toast-overlay.position-top {
+    align-items: flex-start;
+}
+.toast-overlay.position-center {
+    align-items: center;
+}
+.toast-overlay.position-bottom {
+    align-items: flex-end;
+}
+#copy-log-btn {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 10;
+    display: none; /* ★★★ 기본적으로 숨김 처리 ★★★ */
+}
+#copy-log-btn:hover {
+    background-color: #4338ca;
+}
