@@ -13,13 +13,16 @@ class BaccaraConfig extends Model
     protected $table = 'baccara_config';
     protected $primaryKey = 'bc_id';
     public $timestamps = false;
+
     protected $fillable = [
         'logic3_patterns',
+        'logic2_patterns',
         'profit_rate',
         'another_setting',
     ];
     protected $casts = [
         'logic3_patterns' => 'array',
+        'logic2_patterns' => 'array',
         'profit_rate' => 'array',
     ];
 }

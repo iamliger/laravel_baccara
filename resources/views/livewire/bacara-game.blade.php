@@ -1,13 +1,21 @@
 @php
+    // 이 PHP 블록은 최초 페이지 로드 시에만 실행됩니다.
+    // 서버의 초기 상태를 JavaScript로 전달하는 역할을 합니다.
     $initialData = json_encode([
         'jokboHistory' => $jokboHistory,
         'moneyArrStep' => $moneyArrStep,
     ]);
 @endphp
 
+{{-- Livewire 컴포넌트의 최상위 루트 요소입니다. --}}
 <div class="baccara-container" data-initial="{{ $initialData }}">
+
+    {{-- 예측 결과가 표시될 헤더 영역 --}}
     <header id="prediction-header" class="prediction-header"></header>
+
+    {{-- 메인 콘텐츠 영역 --}}
     <main class="baccara-main-content">
+        {{-- 플레이어, 뱅커, 로직 선택, 취소 버튼이 있는 컨트롤 패널 --}}
         <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
             <div class="flex flex-wrap items-center gap-2">
                 <button id="player-btn"
@@ -34,12 +42,17 @@
                     class="px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-black rounded-md text-sm shadow">취소</button>
             </div>
         </div>
-        <div id="main-roadmap-container"
+        
+        {{-- ▼▼▼ 1. wire:ignore 추가 ▼▼▼ --}}
+        {{-- 이 div는 이제 Livewire에 의해 자동으로 업데이트되지 않으며, 오직 JavaScript로만 제어됩니다. --}}
+        <div wire:ignore id="main-roadmap-container"
             class="relative border border-gray-700 rounded-md overflow-x-auto mb-4 shadow-inner checkerboard-bg main-grid-bg"
             style="height: calc(var(--main-cell-size) * 6);">
             <div id="roadmap-grid"></div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        
+        {{-- ▼▼▼ 2. wire:ignore 추가 ▼▼▼ --}}
+        <div wire:ignore class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             @for ($i = 3; $i <= 6; $i++)
                 <div id="history-box-{{ $i }}" data-rows="{{ $i }}"
                     class="relative border border-gray-700 rounded-md shadow checkerboard-bg history-grid-bg overflow-x-auto"
@@ -48,7 +61,9 @@
                 </div>
             @endfor
         </div>
-        <div id="interactive-area" class="relative console-box-container">
+        
+        {{-- ▼▼▼ 3. wire:ignore 추가 ▼▼▼ --}}
+        <div wire:ignore id="interactive-area" class="relative console-box-container">
             <button id="copy-log-btn" type="button">로그 복사</button>
             <div id="console-wrapper" class="toggle-view">
                 <div class="console-box" id="console"></div>
@@ -60,6 +75,8 @@
                 class="absolute px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-lg z-10">차트
                 보기</button>
         </div>
+        
+        {{-- 리셋, 로그아웃 버튼 영역 --}}
         <div class="flex flex-wrap justify-between items-center gap-2 mt-4">
             <button id="reset-btn"
                 class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm shadow">리셋</button>
@@ -70,6 +87,7 @@
             </form>
         </div>
 
+        {{-- 금액 설정 모달 (HTML 구조는 그대로 유지) --}}
         <div id="moneystepinfo-modal" class="modal-overlay hidden">
             <div class="modal-box">
                 <div class="modal-header">
@@ -88,6 +106,8 @@
                         class="modal-btn modal-btn-primary w-full">확인</button></div>
             </div>
         </div>
+        
+        {{-- 환경 설정 모달 (HTML 구조는 그대로 유지) --}}
         <div id="setting-box-modal" class="modal-overlay hidden">
             <div class="modal-box">
                 <div class="modal-header">
@@ -128,6 +148,7 @@
 </div>
 
 @push('scripts')
+    {{-- JavaScript 코드는 여기에 작성됩니다. --}}
     <script>
         document.addEventListener('livewire:load', function() {
             // -----------------------------
@@ -191,20 +212,73 @@
             // -----------------------------
             // Livewire 이벤트 수신
             // -----------------------------
-            Livewire.on('jokboUpdated', (newJokbo, counts, newMoneyArrStep) => {
-                jokboHistory = newJokbo || '';
-                moneyArrStep = newMoneyArrStep || [];
-
-                redrawAllFromJokbo(); // 오직 로드맵만 다시 그림
-                saveState(); // 족보 상태 저장
-
-                if (counts) {
-                    el.playerCountSpan.textContent = counts.player;
-                    el.bankerCountSpan.textContent = counts.banker;
-                    el.totalCountSpan.textContent = counts.total;
+            
+            // ▼▼▼ 4. 'jokboUpdated' 리스너를 'itemAdded' 리스너로 교체 ▼▼▼
+            // 서버에서 새로 추가된 아이템 정보만 받아서 클라이언트에서 처리합니다.
+            Livewire.on('itemAdded', (data) => {
+                // 1. JavaScript가 관리하는 족보 히스토리 문자열에 새 결과를 추가합니다.
+                jokboHistory += data.type;
+                
+                // 2. 업데이트된 족보를 기반으로 모든 로드맵을 다시 그립니다.
+                //    이 함수는 DOM을 직접 조작하므로 빠르고 깜빡임이 없습니다.
+                redrawAllFromJokbo();
+                
+                // 3. 서버에서 받은 최신 카운트로 화면의 숫자를 업데이트합니다.
+                if (data.counts) {
+                    el.playerCountSpan.textContent = data.counts.player;
+                    el.bankerCountSpan.textContent = data.counts.banker;
+                    el.totalCountSpan.textContent = data.counts.total;
                 }
+                
+                // 4. 변경된 족보 상태를 브라우저의 로컬 스토리지에 저장합니다.
+                saveState();
             });
 
+            // 'undo' 액션에 대한 이벤트 리스너 추가
+            Livewire.on('itemRemoved', (data) => {
+                // 1. 족보 히스토리에서 마지막 글자를 제거합니다.
+                jokboHistory = jokboHistory.slice(0, -1);
+                
+                // 2. 단축된 족보를 기반으로 모든 로드맵을 다시 그립니다.
+                redrawAllFromJokbo();
+
+                // 3. 서버에서 받은 최신 카운트로 화면을 업데이트합니다.
+                if (data.counts) {
+                    el.playerCountSpan.textContent = data.counts.player;
+                    el.bankerCountSpan.textContent = data.counts.banker;
+                    el.totalCountSpan.textContent = data.counts.total;
+                }
+                
+                // 4. 변경된 상태를 저장합니다.
+                saveState();
+            });
+            
+            // 'reset' 액션에 대한 이벤트 리스너 추가
+            Livewire.on('gameReset', () => {
+                jokboHistory = '';
+                moneyArrStep = [];
+                
+                redrawAllFromJokbo(); // 빈 족보로 그리므로 모든 그리드가 깨끗해집니다.
+                
+                el.playerCountSpan.textContent = 0;
+                el.bankerCountSpan.textContent = 0;
+                el.totalCountSpan.textContent = 0;
+
+                saveState(); // 빈 상태를 저장합니다.
+                
+                showToast('center-toast', '리셋이 완료되었습니다.', {
+                    type: 'success', // 성공 타입 (초록색)
+                    duration: 1500,  // 1.5초 동안 표시
+                    onComplete: () => {
+                        // 토스트가 사라진 후, 금액 설정 모달을 엽니다.
+                        clearConsole();
+                        addConsoleMessage('게임을 리셋하였습니다.', 'system');
+                        openModal('moneystepinfo-modal');
+                    }
+                });
+            });
+
+            // 나머지 이벤트 리스너는 그대로 유지됩니다.
             Livewire.on('predictionUpdated', (predictionData) => renderPrediction(predictionData));
             Livewire.on('showCoinInfoModal', () => openModal('moneystepinfo-modal'));
             Livewire.on('coinInfoUpdated', (newMoneySteps) => {
@@ -214,8 +288,53 @@
             });
 
             // -----------------------------
-            // 함수 정의
+            // 함수 정의 (이 부분은 변경사항 없음)
             // -----------------------------
+            function showToast(targetId, message, options = {}) {
+                const config = {
+                    type: 'info',       // 기본 타입
+                    duration: 2000,     // 기본 지속시간 2초
+                    position: 'center', // 기본 위치 'center'
+                    onComplete: null,   // ★★★ 콜백 함수를 위한 옵션
+                    ...options
+                };
+
+                // 기존에 같은 타겟에 토스트가 있다면 즉시 제거
+                const previousToast = document.getElementById(`toast-for-${targetId}`);
+                if (previousToast) {
+                    previousToast.remove();
+                }
+                
+                // 새로운 토스트 요소 생성
+                const toastElement = document.createElement('div');
+                toastElement.id = `toast-for-${targetId}`;
+                toastElement.className = `toast-base toast-type-${config.type} toast-position-${config.position}`;
+                toastElement.innerHTML = message;
+                
+                document.body.appendChild(toastElement);
+
+                // 애니메이션을 위해 잠시 후 등장 클래스 추가
+                requestAnimationFrame(() => {
+                    setTimeout(() => toastElement.classList.add('toast-visible'), 10);
+                });
+
+                // 설정된 시간 후 토스트 제거
+                setTimeout(() => {
+                    toastElement.classList.remove('toast-visible');
+                    
+                    // 사라지는 애니메이션(0.3초)이 끝난 후 DOM에서 완전히 제거하고 콜백 실행
+                    toastElement.addEventListener('transitionend', () => {
+                        toastElement.remove();
+                        // ★★★ 콜백 함수가 존재하면 여기서 실행 ★★★
+                        if (typeof config.onComplete === 'function') {
+                            config.onComplete();
+                        }
+                    }, { once: true }); // 이벤트는 한 번만 실행되도록 설정
+
+                }, config.duration);
+            }
+
+
             function getSelectedLogic() {
                 const checkedBtn = el.logicBtnGroup.querySelector('[aria-checked="true"]');
                 return checkedBtn ? checkedBtn.dataset.value : 'logic1';
@@ -235,14 +354,17 @@
 
             function addConsoleMessage(message, type = 'info') {
                 if (!el.consoleBox) return;
-                const msgObj = {
-                    html: message,
-                    type: type,
-                    timestamp: Date.now()
-                };
+                let coloredMessage = message;
+                if (type === 'player') {
+                    coloredMessage = message.replace('플레이어', '<span class="player-text">플레이어</span>');
+                } else if (type === 'banker') {
+                    coloredMessage = message.replace('뱅커', '<span class="banker-text">뱅커</span>');
+                }
+
+                const msgObj = { html: coloredMessage, type: type, timestamp: Date.now() };
                 consoleMessages.push(msgObj);
                 const div = document.createElement('div');
-                div.innerHTML = message;
+                div.innerHTML = coloredMessage;
                 div.className = `console-message type-${type}`;
                 el.consoleBox.appendChild(div);
                 el.consoleBox.scrollTop = el.consoleBox.scrollHeight;
@@ -451,9 +573,6 @@
                 el.totalCountSpan.textContent = jokboHistory.length;
             }
 
-            // -----------------------------
-            // 이벤트 바인딩 (하나의 함수로 통합)
-            // -----------------------------
             function bindEvents() {
                 if (el.playerBtn) el.playerBtn.onclick = () => {
                     addConsoleMessage('플레이어를 선택했습니다.', 'player');
@@ -469,8 +588,6 @@
                 };
                 if (el.resetBtn) el.resetBtn.onclick = () => {
                     if (confirm('정말로 모든 기록을 초기화하시겠습니까?')) {
-                        clearConsole();
-                        addConsoleMessage('게임을 리셋하였습니다.', 'system');
                         Livewire.emit('resetRequest');
                     }
                 };
@@ -480,6 +597,17 @@
                     const v = btn.dataset.value;
                     updateLogicButtonsUI(v);
                     localStorage.setItem('selectedLogic', v);
+
+                    // ★★★ 여기에 토스트 호출 추가 ★★★
+                    showToast('center-toast', `'${v}' 로직으로 변경되었습니다.`, {
+                        type: 'info',    // 정보 타입 (파란색)
+                        duration: 1500,  // 1.5초 동안 표시
+                        onComplete: () => {
+                            // 예시: 토스트가 사라진 후 콘솔에 로그를 남깁니다.
+                            console.log(`'${v}' 로직으로 변경 완료.`);
+                        }
+                    });
+
                     addConsoleMessage(`'${v}' 로직으로 변경되었습니다.`, 'system');
                 };
                 if (el.viewToggleButton) el.viewToggleButton.onclick = () => {
@@ -535,9 +663,6 @@
                 };
             }
 
-            // -----------------------------
-            // 초기화
-            // -----------------------------
             function init() {
                 console.log('Baccara System Initialized');
                 const initialData = JSON.parse(baccaraContainer.dataset.initial || '{}');
@@ -600,8 +725,6 @@
 
                 bindEvents();
             }
-
-            // --- 최초 실행 ---
             init();
         });
     </script>

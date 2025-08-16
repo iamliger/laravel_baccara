@@ -64,7 +64,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore')->withTrashed();
         Route::get('/logic3', [Logic3PatternController::class, 'edit'])->name('logic3.edit');
         Route::put('/logic3', [Logic3PatternController::class, 'update'])->name('logic3.update');
-        Route::resource('/logic2', Logic2PatternController::class);
+        Route::get('/logic2', [Logic2PatternController::class, 'edit'])->name('logic2.edit');
+        Route::put('/logic2', [Logic2PatternController::class, 'update'])->name('logic2.update');
     });
 
     // 1-7. 오직 'Level 2' 사용자만 접근 가능한 바카라 시스템 그룹 (변경 없음)

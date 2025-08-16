@@ -35,6 +35,7 @@ class BacaraGame extends Component
         $userDbState = BacaraDb::firstOrCreate(['memberid' => $user->name], ['bcdata' => '']);
         
         $userDbState->bcdata .= $type;
+        $this->jokboHistory = $userDbState->bcdata;
 
         $result = $predictionService->processTurn($userDbState, $selectedLogic, $isVirtualBetting);
         $this->applyUpdates($result['updates'], $user->name);
@@ -44,10 +45,20 @@ class BacaraGame extends Component
         }
         $userDbState->save();
         
-        $this->jokboHistory = $userDbState->bcdata;
         $this->updateCounts();
-        $this->dispatchUpdate();
+
+        // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
+        // 1. 새로 추가된 아이템의 정보와 최신 카운트를 'itemAdded' 이벤트로 보냅니다.
+        $this->emit('itemAdded', [
+            'type' => $type,
+            'counts' => [
+                'player' => $this->playerCount,
+                'banker' => $this->bankerCount,
+                'total' => $this->totalCount,
+            ]
+        ]);
         
+        // 2. 예측 결과는 별도의 'predictionUpdated' 이벤트로 보냅니다.
         if (!empty($result['prediction'])) {
             $this->emit('predictionUpdated', $result['prediction']);
         }
@@ -59,7 +70,16 @@ class BacaraGame extends Component
             $this->jokboHistory = substr($this->jokboHistory, 0, -1);
             $this->updateAndSaveJokbo();
             $this->updateCounts();
-            $this->dispatchUpdate();
+            
+            // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
+            // 'itemRemoved' 이벤트를 보내 클라이언트 UI를 업데이트합니다.
+            $this->emit('itemRemoved', [
+                'counts' => [
+                    'player' => $this->playerCount,
+                    'banker' => $this->bankerCount,
+                    'total' => $this->totalCount,
+                ]
+            ]);
         }
     }
     
@@ -70,9 +90,10 @@ class BacaraGame extends Component
             $this->moneyArrStep = [];
             $this->updateAndSaveJokbo(true);
             $this->updateCounts();
-            $this->emit('predictionUpdated', null);
-            $this->dispatchUpdate();
-            $this->emit('showCoinInfoModal');
+
+            // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
+            // 'gameReset' 이벤트를 보내 클라이언트에서 모든 것을 초기화하도록 합니다.
+            $this->emit('gameReset');
         }
     }
     
@@ -154,17 +175,10 @@ class BacaraGame extends Component
         $this->totalCount = strlen($this->jokboHistory);
     }
 
-    private function dispatchUpdate()
-    {
-        $this->emit('jokboUpdated', $this->jokboHistory, [
-            'player' => $this->playerCount,
-            'banker' => $this->bankerCount,
-            'total' => $this->totalCount,
-        ], $this->moneyArrStep);
-    }
-
     public function render()
     {
+        // 이제 이 render 메소드는 최초 페이지 로드 시에만 호출됩니다.
+        // 버튼 클릭과 같은 상호작용에서는 더 이상 호출되지 않습니다.
         return view('livewire.bacara-game');
     }
 }

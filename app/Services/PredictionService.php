@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\BacaraDb;
+use App\Models\BaccaraConfig;
 use App\Models\Ticket3;
 use App\Models\Ticket4;
 use App\Models\Ticket5;
@@ -31,13 +32,82 @@ class PredictionService
             $updates['BacaraDb'] = $logic1Result['db_updates']['BacaraDb'] ?? [];
             $updates['Ticket'] = $logic1Result['db_updates']['Ticket'] ?? [];
             $predictionResult = $logic1Result['prediction'];
+        } 
+        // --- ▼▼▼ 로직 2 처리 분기 추가 ▼▼▼ ---
+        elseif ($selectedLogic === 'logic2') {
+            // 새로 만들 processLogic2 메소드를 호출합니다.
+            $logic2Result = $this->processLogic2($userDbState);
+            // 로직 2는 현재 DB 업데이트 로직이 없으므로 prediction 결과만 처리합니다.
+            $predictionResult = $logic2Result['prediction'];
         }
+        // --- ▲▲▲ 로직 2 처리 분기 추가 ▲▲▲ ---
 
         return ['updates' => $updates, 'prediction' => $predictionResult];
     }
 
+    // --- ▼▼▼ 로직 2 처리를 위한 새로운 메소드 추가 ▼▼▼ ---
     /**
-     * 로직 1의 전체 과정을 처리
+     * 로직 2의 전체 과정을 처리
+     */
+    private function processLogic2(BacaraDb $userDbState): array
+    {
+        $jokbo = $userDbState->bcdata ?? '';
+        $slen = strlen($jokbo);
+        $allPredictions = [];
+
+        // 1. DB의 baccara_config 테이블에서 로직 2 패턴들을 가져옵니다.
+        $config = BaccaraConfig::first();
+        $logic2_config = $config->logic2_patterns ?? [];
+        $sequences = $logic2_config['sequences'] ?? [];
+
+        // 2. 패턴이 하나도 설정되어 있지 않거나, 족보가 너무 짧으면 예측 없이 종료합니다.
+        if (empty($sequences) || $slen < 1) {
+            return ['prediction' => ['type' => 'logic2', 'predictions' => []]];
+        }
+        
+        // 3. 모든 저장된 패턴을 순회하며 현재 족보와 일치하는지 확인합니다.
+        foreach ($sequences as $index => $sequence) {
+            $patternLength = count($sequence);
+
+            // 현재 족보가 패턴보다 짧으면 확인할 필요가 없습니다.
+            if ($slen < $patternLength) {
+                continue;
+            }
+
+            // 족보의 마지막 부분에서 패턴 길이만큼 잘라내어 비교할 부분을 만듭니다.
+            $jokboEndPart = substr($jokbo, -$patternLength);
+            
+            // 패턴 배열을 문자열로 변환합니다. (1 -> P, -1 -> B)
+            $patternString = implode('', array_map(function($val) {
+                return $val == 1 ? 'P' : 'B';
+            }, $sequence));
+
+            // 4. 족보의 끝 부분과 패턴이 일치하는지 확인합니다.
+            if ($jokboEndPart === $patternString) {
+                // 5. 일치하면, "꺽"는 원칙에 따라 다음 베팅을 추천합니다.
+                //    (패턴의 마지막 결과와 반대로 추천)
+                $lastPatternResult = substr($patternString, -1);
+                $recommendation = $this->reverse($lastPatternResult);
+
+                // 예측 결과 배열에 추가합니다.
+                $allPredictions[] = [
+                    'sub_type' => '패턴 '.($index + 1), // 예: "패턴 1"
+                    'recommend' => $recommendation,
+                    'step' => 1, // 로직 2는 단계 개념이 없으므로 1로 고정
+                    'amount' => 1000, // 금액은 우선 고정값
+                    'mae' => 0, // 로직 2는 매수 개념이 없으므로 0
+                ];
+            }
+        }
+        
+        return [
+            'prediction' => ['type' => 'logic2', 'predictions' => $allPredictions]
+        ];
+    }
+    // --- ▲▲▲ 로직 2 처리를 위한 새로운 메소드 추가 ▲▲▲ ---
+
+    /**
+     * 로직 1의 전체 과정을 처리 (이 부분은 변경 없음)
      */
     private function processLogic1(BacaraDb $userDbState): array
     {
@@ -46,7 +116,6 @@ class PredictionService
         $jokbo = $userDbState->bcdata ?? '';
         $slen = strlen($jokbo);
 
-        // ★★★ calbaccara.php와 동일한 최소 조건 검사 추가 ★★★
         if ($slen < 6) {
             return [
                 'db_updates' => [],
@@ -72,12 +141,11 @@ class PredictionService
 
             foreach ($currentPatterns as $p) {
                 if (($p['bettringround'] ?? 0) === ($slen + 1)) {
-                    // ★★★ JavaScript가 사용하는 키 이름으로 변환하여 추가 ★★★
                     $allPredictions[] = [
                         'sub_type' => $p['bettingtype'],
                         'recommend' => $p['bettingpos'],
                         'step' => ($p['lose'] ?? 0) + 1,
-                        'amount' => 1000, // 금액은 우선 고정값
+                        'amount' => 1000,
                         'mae' => $p['measu'],
                     ];
                 }
@@ -92,7 +160,7 @@ class PredictionService
     }
     
     /**
-     * 기존에 활성화된 패턴의 승/패를 처리
+     * 기존에 활성화된 패턴의 승/패를 처리 (이 부분은 변경 없음)
      */
     private function processExistingPattern(array $patterns, string $jokbo, int $mae, string $memberId): array
     {
@@ -124,7 +192,7 @@ class PredictionService
     }
 
     /**
-     * calbaccara.php의 로직에 따라 새로운 패턴 발동 여부 검사
+     * calbaccara.php의 로직에 따라 새로운 패턴 발동 여부 검사 (이 부분은 변경 없음)
      */
     private function checkForPatternActivation(string $jokbo, int $mae): array
     {
@@ -132,14 +200,8 @@ class PredictionService
         if ($slen == 0) return [];
         $pos = $jokbo[$slen - 1];
         $activated = [];
-
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★★★ 바로 이 부분! 인덱스 계산을 정확하게 수정했습니다. ★★★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         
-        // _pattern (3매 전용)
         if ($mae === 3 && $slen >= $mae) {
-            // calbaccara: $bcdata[($slen-1) - $sidx] -> (현재길이-1)-3 = 현재길이-4
             $compareIndex = $slen - 1 - $mae;
             if (isset($jokbo[$compareIndex]) && $pos === $jokbo[$compareIndex]) {
                 $activated[0] = $this->createPatternState('_pattern', $pos, $mae, $slen + 1);
@@ -148,7 +210,6 @@ class PredictionService
 
         $remain = $slen % $mae;
 
-        // tpattern
         if ($remain >= 1 && $slen >= ($mae * 2 + $remain)) {
             $mustPosIdx = $slen - ($mae * 2) -1;
             if (isset($jokbo[$mustPosIdx]) && $pos !== $jokbo[$mustPosIdx]) {
@@ -159,7 +220,6 @@ class PredictionService
             }
         }
         
-        // upattern & npattern
         if (($remain >= 2 || $remain === 0) && $slen >= ($mae*2 + ($remain == 0 ? $mae : $remain))) {
             $mustPosUIdx = $slen - $mae - 2;
             if (isset($jokbo[$mustPosUIdx]) && $pos !== $jokbo[$mustPosUIdx]) {
@@ -182,7 +242,7 @@ class PredictionService
     }
 
     /**
-     * 헬퍼 함수들
+     * 헬퍼 함수들 (이 부분은 변경 없음)
      */
     private function getDefaultPatternState(int $count = 4): array {
         return array_fill(0, $count, ["bettingtype" => "none", "bettringround" => 0, "bettingpos" => "", "isshow" => false, "lose" => 0, "measu" => 0, "icon" => ""]);

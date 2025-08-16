@@ -1,0 +1,73 @@
+새 볼륨 볼륨에 대한 폴더 경로의 목록입니다.
+볼륨 일련 번호는 5841-B426입니다.
+D:.
+│  dashboard.blade.php
+│  viewlist.txt
+│  welcome.blade.php
+│  
+├─admin
+│  ├─logic2
+│  │      create.blade.php
+│  │      edit.blade.php
+│  │      index.blade.php
+│  │      
+│  ├─logic3
+│  │      edit.blade.php
+│  │      
+│  └─users
+│          create.blade.php
+│          edit.blade.php
+│          index.blade.php
+│          
+├─auth
+│      approval-pending.blade.php
+│      confirm-password.blade.php
+│      forgot-password.blade.php
+│      login.blade.php
+│      register.blade.php
+│      request-code.blade.php
+│      reset-password.blade.php
+│      verify-email.blade.php
+│      
+├─bacara
+│      create.blade.php
+│      
+├─components
+│      application-logo.blade.php
+│      auth-card.blade.php
+│      auth-session-status.blade.php
+│      auth-validation-errors.blade.php
+│      button.blade.php
+│      dropdown-link.blade.php
+│      dropdown.blade.php
+│      input.blade.php
+│      label.blade.php
+│      nav-link.blade.php
+│      responsive-nav-link.blade.php
+│      
+├─layouts
+│      app.blade.php
+│      guest.blade.php
+│      navigation.blade.php
+│      sidebar.blade.php
+│      
+├─livewire
+│      bacara-game.blade.php
+│      
+├─profile
+│  │  edit.blade.php
+│  │  
+│  └─partials
+│          delete-user-form.blade.php
+│          update-password-form.blade.php
+│          update-profile-information-form.blade.php
+│          
+└─system
+    │  dashboard.blade.php
+    │  _user_tree_item.blade.php
+    │  
+    └─users
+            create.blade.php
+            index.blade.php
+            _user_row.blade.php
+            

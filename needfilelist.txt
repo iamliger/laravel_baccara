@@ -1,0 +1,3225 @@
+app/Http/Controllers/BacaraController.php: 바카라 게임의 메인 로직을 처리하는 핵심 컨트롤러입니다. 게임 생성, 진행, 결과 처리 등의 HTTP 요청을 담당합니다.
+---------------------------------------------------------------------------------------
+class BacaraController extends Controller
+{
+    /**
+     * 새로운 바카라 슈(Shoe)를 기록하는 페이지를 보여줍니다.
+     */
+    public function create()
+    {
+        // 나중에 만들 'bacara.create' 뷰를 보여줍니다.
+        return view('bacara.create');
+    }
+
+    /**
+     * 사용자가 입력한 바카라 슈 데이터를 데이터베이스에 저장합니다.
+     */
+    public function store(Request $request)
+    {
+        // 이 함수의 로직은 다음 단계에서 채워나갈 것입니다.
+        // 성공적으로 저장한 뒤, 결과 분석 페이지 등으로 리디렉션하게 됩니다.
+    }
+}
+
+
+app/Http/Controllers/Admin/: 관리자 페이지 관련 컨트롤러들입니다.
+-----------------------------------------------------------------------------------------------
+class UserController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        // 소프트 삭제된 사용자를 포함하여, 최신순으로, 10개씩 페이지네이션하여 가져옵니다.
+        $users = User::withTrashed()->latest()->paginate(10);
+        return view('admin.users.index', compact('users'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $roles = Role::all();
+        // 모든 사용자를 가져와서 'potential_parents' 라는 이름으로 전달합니다.
+        $potential_parents = User::all();
+        return view('admin.users.create', compact('roles', 'potential_parents'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:users'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'role' => ['required']
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        $user->assignRole($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '새로운 회원을 추가했습니다.');
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function edit(User $user)
+    {
+        $roles = Role::all();
+        // 수정 대상 자신을 제외한 모든 사용자를 가져옵니다. (스스로를 추천할 수 없도록)
+        $potential_parents = User::where('id', '!=', $user->id)->get();
+        return view('admin.users.edit', compact('user', 'roles', 'potential_parents'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, User $user)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'role' => ['required'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->update([
+            'name' => $request->name,
+            'email' => $request->email,
+        ]);
+
+        if ($request->filled('password')) {
+            $user->update(['password' => Hash::make($request->password)]);
+        }
+
+        $user->syncRoles($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '회원 정보를 수정했습니다.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy(User $user)
+    {
+        $user->delete();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 강퇴 처리했습니다.');
+    }
+    
+    /**
+     * Ban the specified user.
+     */
+    public function ban(User $user)
+    {
+        $user->update(['banned_at' => now()]);
+        return redirect()->route('admin.users.index')->with('success', '사용자를 차단했습니다.');
+    }
+
+    /**
+     * Unban the specified user.
+     */
+    public function unban(User $user)
+    {
+        $user->update(['banned_at' => null]);
+        return redirect()->route('admin.users.index')->with('success', '사용자 차단을 해제했습니다.');
+    }
+    
+    /**
+     * Restore the specified user.
+     */
+    public function restore($id)
+    {
+        User::withTrashed()->where('id', $id)->restore();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 복구했습니다.');
+    }
+}
+
+
+Logic2PatternController.php, 
+-----------------------------------------------------------------------------------------
+class UserController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        // 소프트 삭제된 사용자를 포함하여, 최신순으로, 10개씩 페이지네이션하여 가져옵니다.
+        $users = User::withTrashed()->latest()->paginate(10);
+        return view('admin.users.index', compact('users'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $roles = Role::all();
+        // 모든 사용자를 가져와서 'potential_parents' 라는 이름으로 전달합니다.
+        $potential_parents = User::all();
+        return view('admin.users.create', compact('roles', 'potential_parents'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:users'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'role' => ['required']
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        $user->assignRole($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '새로운 회원을 추가했습니다.');
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function edit(User $user)
+    {
+        $roles = Role::all();
+        // 수정 대상 자신을 제외한 모든 사용자를 가져옵니다. (스스로를 추천할 수 없도록)
+        $potential_parents = User::where('id', '!=', $user->id)->get();
+        return view('admin.users.edit', compact('user', 'roles', 'potential_parents'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, User $user)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'role' => ['required'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->update([
+            'name' => $request->name,
+            'email' => $request->email,
+        ]);
+
+        if ($request->filled('password')) {
+            $user->update(['password' => Hash::make($request->password)]);
+        }
+
+        $user->syncRoles($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '회원 정보를 수정했습니다.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy(User $user)
+    {
+        $user->delete();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 강퇴 처리했습니다.');
+    }
+    
+    /**
+     * Ban the specified user.
+     */
+    public function ban(User $user)
+    {
+        $user->update(['banned_at' => now()]);
+        return redirect()->route('admin.users.index')->with('success', '사용자를 차단했습니다.');
+    }
+
+    /**
+     * Unban the specified user.
+     */
+    public function unban(User $user)
+    {
+        $user->update(['banned_at' => null]);
+        return redirect()->route('admin.users.index')->with('success', '사용자 차단을 해제했습니다.');
+    }
+    
+    /**
+     * Restore the specified user.
+     */
+    public function restore($id)
+    {
+        User::withTrashed()->where('id', $id)->restore();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 복구했습니다.');
+    }
+}
+
+
+
+Logic3PatternController.php: 게임의 예측 로직 패턴을 관리하는 컨트롤러입니다.
+------------------------------------------------------------------------------------
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\BaccaraConfig;
+use Illuminate\Http\Request;
+
+class Logic3PatternController extends Controller
+{
+    /**
+     * Logic 3 설정 수정 폼을 보여줍니다.
+     */
+    public function edit()
+    {
+        // bc_id가 1인 설정을 찾거나, 없으면 새로 만듭니다.
+        $config = BaccaraConfig::firstOrCreate(['bc_id' => 1]);
+
+        return view('admin.logic3.edit', compact('config'));
+    }
+
+    /**
+     * Logic 3 설정을 업데이트합니다.
+     */
+    public function update(Request $request)
+    {
+        // 1. 유효성 검사
+        $validated = $request->validate([
+            'pattern_count' => ['required', 'integer', 'min:1', 'max:50'],
+            'sequences' => ['required', 'array'],
+            'sequences.*' => ['required', 'array', 'size:7'], // 각 시퀀스는 7개의 아이템을 가져야 함
+            'sequences.*.*' => ['required', 'in:1,-1'], // 각 아이템은 1 또는 -1 이어야 함
+        ]);
+        
+        // 2. JSON 데이터 생성
+        $config_data = [
+            'pattern_count' => $validated['pattern_count'],
+            'sequences' => $validated['sequences']
+        ];
+        
+        // 3. DB 업데이트
+        $config = BaccaraConfig::firstOrCreate(['bc_id' => 1]);
+        $config->update([
+            'logic3_patterns' => $config_data
+        ]);
+
+        return redirect()->route('admin.logic3.edit')->with('success', 'Logic-3 패턴이 성공적으로 저장되었습니다.');
+    }
+}
+
+
+
+
+
+UserController.php: 관리자가 사용자를 관리하는 기능의 컨트롤러입니다.
+-----------------------------------------------------------------------
+class UserController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        // 소프트 삭제된 사용자를 포함하여, 최신순으로, 10개씩 페이지네이션하여 가져옵니다.
+        $users = User::withTrashed()->latest()->paginate(10);
+        return view('admin.users.index', compact('users'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $roles = Role::all();
+        // 모든 사용자를 가져와서 'potential_parents' 라는 이름으로 전달합니다.
+        $potential_parents = User::all();
+        return view('admin.users.create', compact('roles', 'potential_parents'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:users'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'role' => ['required']
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        $user->assignRole($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '새로운 회원을 추가했습니다.');
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function edit(User $user)
+    {
+        $roles = Role::all();
+        // 수정 대상 자신을 제외한 모든 사용자를 가져옵니다. (스스로를 추천할 수 없도록)
+        $potential_parents = User::where('id', '!=', $user->id)->get();
+        return view('admin.users.edit', compact('user', 'roles', 'potential_parents'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, User $user)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'role' => ['required'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->update([
+            'name' => $request->name,
+            'email' => $request->email,
+        ]);
+
+        if ($request->filled('password')) {
+            $user->update(['password' => Hash::make($request->password)]);
+        }
+
+        $user->syncRoles($request->role);
+
+        return redirect()->route('admin.users.index')->with('success', '회원 정보를 수정했습니다.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\User  $user
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy(User $user)
+    {
+        $user->delete();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 강퇴 처리했습니다.');
+    }
+    
+    /**
+     * Ban the specified user.
+     */
+    public function ban(User $user)
+    {
+        $user->update(['banned_at' => now()]);
+        return redirect()->route('admin.users.index')->with('success', '사용자를 차단했습니다.');
+    }
+
+    /**
+     * Unban the specified user.
+     */
+    public function unban(User $user)
+    {
+        $user->update(['banned_at' => null]);
+        return redirect()->route('admin.users.index')->with('success', '사용자 차단을 해제했습니다.');
+    }
+    
+    /**
+     * Restore the specified user.
+     */
+    public function restore($id)
+    {
+        User::withTrashed()->where('id', $id)->restore();
+        return redirect()->route('admin.users.index')->with('success', '사용자를 복구했습니다.');
+    }
+}
+
+
+
+
+app/Http/Controllers/Api/BacaraAnalyticsController.php: 바카라 게임 통계 데이터를 API 형태로 제공하는 컨트롤러입니다.
+---------------------------------------------------------------------------------
+class BacaraAnalyticsController extends Controller
+{
+    public function analyze(Request $request)
+    {
+        // 1. 요청 유효성 검사
+        $validated = $request->validate([
+            'jokbo' => ['required', 'string'],
+            'selectedLogic' => ['required', 'string', 'in:logic1,logic2,logic3,logic4'],
+        ]);
+
+        $jokbo = $validated['jokbo'];
+        $logic = $validated['selectedLogic'];
+
+        // 2. ★★★ 여기에 선생님의 핵심 분석 알고리즘이 들어갑니다. ★★★
+        // 이 부분은 선생님의 기존 PHP 로직을 가져와서 변환해야 합니다.
+        // 예시로, 간단한 더미(dummy) 결과를 반환하는 로직을 넣겠습니다.
+        
+        $recommendation = (rand(0, 1) == 0) ? 'P' : 'B'; // 랜덤으로 P 또는 B 추천
+        $isWin = (substr($jokbo, -1) == $recommendation) ? 1 : -1; // 마지막 결과와 비교하여 승패 결정
+
+        $dummyData = [
+            'success' => true,
+            'isWin' => $isWin,
+            'data' => [
+                // Logic 3 형태의 더미 데이터
+                [
+                    'isshow' => true,
+                    'bettingpos' => $recommendation,
+                    'sub_type' => '종합 예측'
+                ]
+            ]
+        ];
+        // ★★★ 분석 알고리즘 끝 ★★★
+
+        // 3. 분석 결과를 JSON 형태로 반환합니다.
+        return response()->json($dummyData);
+    }
+}
+
+
+app/Http/Livewire/BacaraGame.php: Livewire를 사용하여 실시간 바카라 게임 UI와 상호작용을 처리하는 핵심 컴포넌트입니다. 사용자의 베팅, 카드 공개 등을 실시간으로 반영합니다.
+---------------------------------------------------------------------------------------
+class BacaraGame extends Component
+{
+    public string $jokboHistory = '';
+    public int $playerCount = 0;
+    public int $bankerCount = 0;
+    public int $totalCount = 0;
+    public array $moneyArrStep = [];
+
+    protected $listeners = ['addResultRequest', 'undoRequest', 'resetRequest', 'setCoinInfoRequest'];
+
+    public function mount()
+    {
+        $this->loadGameFromDB();
+    }
+
+    public function addResultRequest(string $type, string $selectedLogic, bool $isVirtualBetting, PredictionService $predictionService)
+    {
+        if (($type !== 'P' && $type !== 'B') || !Auth::check()) return;
+        
+        $user = Auth::user();
+        $userDbState = BacaraDb::firstOrCreate(['memberid' => $user->name], ['bcdata' => '']);
+        
+        $userDbState->bcdata .= $type;
+
+        $result = $predictionService->processTurn($userDbState, $selectedLogic, $isVirtualBetting);
+        $this->applyUpdates($result['updates'], $user->name);
+        
+        foreach ($result['updates']['BacaraDb'] ?? [] as $field => $value) {
+            $userDbState->$field = $value;
+        }
+        $userDbState->save();
+        
+        $this->jokboHistory = $userDbState->bcdata;
+        $this->updateCounts();
+        $this->dispatchUpdate();
+        
+        if (!empty($result['prediction'])) {
+            $this->emit('predictionUpdated', $result['prediction']);
+        }
+    }
+    
+    public function undoRequest()
+    {
+        if (strlen($this->jokboHistory) > 0 && Auth::check()) {
+            $this->jokboHistory = substr($this->jokboHistory, 0, -1);
+            $this->updateAndSaveJokbo();
+            $this->updateCounts();
+            $this->dispatchUpdate();
+        }
+    }
+    
+    public function resetRequest()
+    {
+        if (Auth::check()) {
+            $this->jokboHistory = '';
+            $this->moneyArrStep = [];
+            $this->updateAndSaveJokbo(true);
+            $this->updateCounts();
+            $this->emit('predictionUpdated', null);
+            $this->dispatchUpdate();
+            $this->emit('showCoinInfoModal');
+        }
+    }
+    
+    public function setCoinInfoRequest(int $startAmount)
+    {
+        if ($startAmount <= 0 || !Auth::check()) return;
+
+        $config = BaccaraConfig::first();
+        $rates = $config->profit_rate ?? [1, 2, 4, 8, 16, 32, 64]; 
+        if(!is_array($rates) || empty($rates)) {
+            $rates = [1, 2, 4, 8, 16, 32, 64];
+        }
+
+        $this->moneyArrStep = array_map(fn($rate) => $startAmount * $rate, $rates);
+
+        BacaraDb::updateOrCreate(
+            ['memberid' => Auth::user()->name],
+            ['coininfo' => json_encode($this->moneyArrStep)]
+        );
+        
+        $this->emit('coinInfoUpdated', $this->moneyArrStep);
+    }
+    
+    private function updateAndSaveJokbo($isReset = false)
+    {
+        $updateData = ['bcdata' => $this->jokboHistory];
+        if ($isReset) {
+            $updateData['pattern_3'] = '[]'; $updateData['pattern_4'] = '[]'; $updateData['pattern_5'] = '[]'; $updateData['pattern_6'] = '[]';
+            $updateData['logic_state'] = null;
+            $updateData['coininfo'] = '[]';
+        }
+        BacaraDb::updateOrCreate(['memberid' => Auth::user()->name], $updateData);
+    }
+    
+    private function applyUpdates(array $updates, string $memberId): void
+    {
+        foreach ($updates['Ticket'] ?? [] as $update) {
+            $modelClass = $update['model'];
+            $fieldName = $update['field'];
+            $isWin = $update['is_win'];
+
+            if(class_exists($modelClass)) {
+                $record = $modelClass::firstOrCreate(['memberid' => $memberId]);
+                $stats = json_decode($record->$fieldName, true);
+                if (!is_array($stats)) $stats = ['win' => 0, 'lose' => 0, 'remwin' => 0, 'remlose' => 0];
+
+                if ($isWin) {
+                    $stats['win']++; $stats['remwin']++; $stats['lose'] = 0;
+                } else {
+                    $stats['lose']++;
+                    if ($stats['lose'] >= 9) { $stats['lose'] = 0; $stats['remlose']++; }
+                }
+                $record->$fieldName = json_encode($stats);
+                $record->save();
+            }
+        }
+    }
+
+    private function loadGameFromDB()
+    {
+        $user = Auth::user();
+        if ($user) {
+            $savedGame = BacaraDb::firstWhere('memberid', $user->name);
+            if ($savedGame) {
+                $this->jokboHistory = $savedGame->bcdata ?? '';
+                $this->moneyArrStep = json_decode($savedGame->coininfo, true) ?? [];
+            }
+            if (empty($this->moneyArrStep)) {
+                $this->emit('showCoinInfoModal');
+            }
+        }
+        $this->updateCounts();
+    }
+    
+    private function updateCounts()
+    {
+        $this->playerCount = substr_count($this->jokboHistory, 'P');
+        $this->bankerCount = substr_count($this->jokboHistory, 'B');
+        $this->totalCount = strlen($this->jokboHistory);
+    }
+
+    private function dispatchUpdate()
+    {
+        $this->emit('jokboUpdated', $this->jokboHistory, [
+            'player' => $this->playerCount,
+            'banker' => $this->bankerCount,
+            'total' => $this->totalCount,
+        ], $this->moneyArrStep);
+    }
+
+    public function render()
+    {
+        return view('livewire.bacara-game');
+    }
+}
+
+
+app/Services/BaccaratScorer.php: 바카라 게임의 점수를 계산하는 서비스 로직 파일입니다.
+----------------------------------
+class BaccaratScorer
+{
+    private array $matrix = [];
+    private int $lastCol = 0;
+
+    public function getAllRoads(string $jokbo): array
+    {
+        $this->buildMatrix($jokbo);
+        return [
+            'main' => $this->getMainRoadData(),
+            'big_eye' => $this->getDerivedRoadData(2, 3), // 3매
+            'small' => $this->getDerivedRoadData(3, 4),   // 4매
+            'cockroach' => $this->getDerivedRoadData(4, 5), // 5매
+            'sixth' => $this->getDerivedRoadData(5, 6)    // 6매
+        ];
+    }
+    
+    private function buildMatrix(string $jokbo): void
+    {
+        $this->matrix = []; $this->lastCol = 0;
+        if (empty($jokbo)) return;
+        $col = 1; $row = 1; $last = null;
+        foreach (str_split($jokbo) as $char) {
+            if ($last !== null && $char !== $last) { $col++; $row = 1; }
+            if ($row > 6) {
+                $this->matrix[$col + ($row - 7)][5] = $char;
+            } else {
+                $this->matrix[$col][$row - 1] = $char;
+            }
+            $row++; $last = $char;
+        }
+        $this->lastCol = $col;
+    }
+
+    private function getMainRoadData(): array
+    {
+        $data = [];
+        foreach ($this->matrix as $col => $rows) {
+            foreach ($rows as $row => $type) {
+                $data[] = ['col' => $col, 'row' => $row + 1, 'type' => $type];
+            }
+        }
+        return $data;
+    }
+
+    private function getDerivedRoadData(int $colOffset, int $rowNum): array
+    {
+        $road = []; $roadCol = 1; $roadRow = 1; $lastColor = null;
+        for ($col = $colOffset; $col <= $this->lastCol + 5; $col++) {
+            for ($row = 2; $row <= 7; $row++) {
+                $refCol = $col - ($colOffset - 1);
+                $cell1 = $this->getCell($refCol, $row);
+                $cell2 = $this->getCell($col, $row);
+                if ($row === 2) {
+                    $cell2 = $this->getCell($col - 1, $row);
+                }
+                if ($cell1 === null && $cell2 === null) {
+                    if ($row === 2 && $col > $this->lastCol) {
+                        return $road;
+                    }
+                    continue;
+                }
+                $color = ($cell1 === $cell2) ? 'red' : 'blue';
+                if ($lastColor !== null && $color !== $lastColor && !empty($road)) {
+                    $roadCol++;
+                    $roadRow = 1;
+                }
+                if ($roadRow > $rowNum - 1) {
+                    $roadCol++;
+                    $roadRow = 1;
+                }
+                $road[] = ['col' => $roadCol, 'row' => $roadRow, 'color' => $color];
+                $roadRow++;
+                $lastColor = $color;
+            }
+        }
+        return $road;
+    }
+    
+    private function getCell($col, $row)
+    {
+        return $this->matrix[$col][$row - 1] ?? null;
+    }
+}
+
+
+app/Services/PredictionService.php: 저장된 로직 패턴을 기반으로 다음 결과를 예측하는 서비스 로직 파일입니다.
+------------------------------------
+class PredictionService
+{
+    /** N매에 따른 Ticket 모델 매핑 */
+    const TICKET_MODELS = [
+        3 => Ticket3::class,
+        4 => Ticket4::class,
+        5 => Ticket5::class,
+        6 => Ticket6::class,
+    ];
+
+    /**
+     * 메인 처리 메소드 (BacaraGame 컴포넌트에서 호출)
+     */
+    public function processTurn(BacaraDb $userDbState, string $selectedLogic, bool $isVirtualBetting): array
+    {
+        $updates = ['BacaraDb' => [], 'Ticket' => []];
+        $predictionResult = null;
+
+        if ($selectedLogic === 'logic1') {
+            $logic1Result = $this->processLogic1($userDbState);
+            $updates['BacaraDb'] = $logic1Result['db_updates']['BacaraDb'] ?? [];
+            $updates['Ticket'] = $logic1Result['db_updates']['Ticket'] ?? [];
+            $predictionResult = $logic1Result['prediction'];
+        }
+
+        return ['updates' => $updates, 'prediction' => $predictionResult];
+    }
+
+    /**
+     * 로직 1의 전체 과정을 처리
+     */
+    private function processLogic1(BacaraDb $userDbState): array
+    {
+        $allDbUpdates = ['BacaraDb' => [], 'Ticket' => []];
+        $allPredictions = [];
+        $jokbo = $userDbState->bcdata ?? '';
+        $slen = strlen($jokbo);
+
+        // ★★★ calbaccara.php와 동일한 최소 조건 검사 추가 ★★★
+        if ($slen < 6) {
+            return [
+                'db_updates' => [],
+                'prediction' => ['type' => 'logic1', 'predictions' => []]
+            ];
+        }
+
+        for ($mae = 3; $mae <= 6; $mae++) {
+            $patternField = "pattern_{$mae}";
+            $currentPatterns = json_decode($userDbState->$patternField, true);
+            if (!is_array($currentPatterns)) $currentPatterns = $this->getDefaultPatternState();
+            
+            $resultUpdates = $this->processExistingPattern($currentPatterns, $jokbo, $mae, $userDbState->memberid);
+            $currentPatterns = $resultUpdates['updated_patterns'];
+            if (!empty($resultUpdates['ticket_updates'])) {
+                $allDbUpdates['Ticket'] = array_merge($allDbUpdates['Ticket'], $resultUpdates['ticket_updates']);
+            }
+            
+            $newlyActivated = $this->checkForPatternActivation($jokbo, $mae);
+            foreach ($newlyActivated as $index => $patternInfo) {
+                $currentPatterns[$index] = $patternInfo;
+            }
+
+            foreach ($currentPatterns as $p) {
+                if (($p['bettringround'] ?? 0) === ($slen + 1)) {
+                    // ★★★ JavaScript가 사용하는 키 이름으로 변환하여 추가 ★★★
+                    $allPredictions[] = [
+                        'sub_type' => $p['bettingtype'],
+                        'recommend' => $p['bettingpos'],
+                        'step' => ($p['lose'] ?? 0) + 1,
+                        'amount' => 1000, // 금액은 우선 고정값
+                        'mae' => $p['measu'],
+                    ];
+                }
+            }
+            $allDbUpdates['BacaraDb'][$patternField] = json_encode($currentPatterns);
+        }
+        
+        return [
+            'db_updates' => $allDbUpdates,
+            'prediction' => ['type' => 'logic1', 'predictions' => $allPredictions]
+        ];
+    }
+    
+    /**
+     * 기존에 활성화된 패턴의 승/패를 처리
+     */
+    private function processExistingPattern(array $patterns, string $jokbo, int $mae, string $memberId): array
+    {
+        $ticketUpdates = [];
+        $slen = strlen($jokbo);
+        $lastResult = substr($jokbo, -1);
+        if ($slen === 0) return ['updated_patterns' => $patterns, 'ticket_updates' => []];
+
+        foreach ($patterns as $index => &$p) {
+            if (($p['bettingtype'] ?? 'none') !== 'none' && ($p['bettringround'] ?? 0) === $slen) {
+                $isWin = ($lastResult === $p['bettingpos']);
+                
+                $ticketUpdates[] = [
+                    'model' => self::TICKET_MODELS[$mae],
+                    'field' => $p['bettingtype'],
+                    'is_win' => $isWin
+                ];
+
+                if ($isWin) {
+                    $p = $this->getDefaultPatternState(1)[0];
+                } else {
+                    $p['lose'] = ($p['lose'] ?? 0) + 1;
+                    if ($p['lose'] >= 9) $p['lose'] = 0;
+                    $p['bettringround'] = $slen + 1;
+                }
+            }
+        }
+        return ['updated_patterns' => $patterns, 'ticket_updates' => $ticketUpdates];
+    }
+
+    /**
+     * calbaccara.php의 로직에 따라 새로운 패턴 발동 여부 검사
+     */
+    private function checkForPatternActivation(string $jokbo, int $mae): array
+    {
+        $slen = strlen($jokbo);
+        if ($slen == 0) return [];
+        $pos = $jokbo[$slen - 1];
+        $activated = [];
+
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★★★ 바로 이 부분! 인덱스 계산을 정확하게 수정했습니다. ★★★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        
+        // _pattern (3매 전용)
+        if ($mae === 3 && $slen >= $mae) {
+            // calbaccara: $bcdata[($slen-1) - $sidx] -> (현재길이-1)-3 = 현재길이-4
+            $compareIndex = $slen - 1 - $mae;
+            if (isset($jokbo[$compareIndex]) && $pos === $jokbo[$compareIndex]) {
+                $activated[0] = $this->createPatternState('_pattern', $pos, $mae, $slen + 1);
+            }
+        }
+
+        $remain = $slen % $mae;
+
+        // tpattern
+        if ($remain >= 1 && $slen >= ($mae * 2 + $remain)) {
+            $mustPosIdx = $slen - ($mae * 2) -1;
+            if (isset($jokbo[$mustPosIdx]) && $pos !== $jokbo[$mustPosIdx]) {
+                $arrT = [$slen - ($mae*2)-2, $slen-$mae-2, $slen-$mae-1, $slen-2];
+                $isMatch = true;
+                foreach ($arrT as $idx) { if (!isset($jokbo[$idx]) || $jokbo[$idx] !== $pos) { $isMatch = false; break; } }
+                if ($isMatch) $activated[1] = $this->createPatternState('tpattern', $this->reverse($pos), $mae, $slen + 1);
+            }
+        }
+        
+        // upattern & npattern
+        if (($remain >= 2 || $remain === 0) && $slen >= ($mae*2 + ($remain == 0 ? $mae : $remain))) {
+            $mustPosUIdx = $slen - $mae - 2;
+            if (isset($jokbo[$mustPosUIdx]) && $pos !== $jokbo[$mustPosUIdx]) {
+                $arrU = [$slen-($mae*2)-3, $slen-($mae*2)-2, $slen-$mae-2, $slen-3, $slen-2];
+                $isMatch = true;
+                foreach($arrU as $idx) { if(!isset($jokbo[$idx]) || $jokbo[$idx] !== $pos) { $isMatch = false; break; } }
+                if ($isMatch) $activated[2] = $this->createPatternState('upattern', $this->reverse($pos), $mae, $slen + 1);
+            }
+
+            $mustPosNIdx = $slen - $mae - 1;
+            if(isset($jokbo[$mustPosNIdx]) && $pos !== $jokbo[$mustPosNIdx]) {
+                $arrN = [$slen-($mae*2)-3, $slen-($mae*2)-2, $slen-$mae-3, $slen-3, $slen-2];
+                $isMatch = true;
+                foreach($arrN as $idx) { if(!isset($jokbo[$idx]) || $jokbo[$idx] !== $pos) { $isMatch = false; break; } }
+                if ($isMatch) $activated[3] = $this->createPatternState('npattern', $this->reverse($pos), $mae, $slen + 1);
+            }
+        }
+        
+        return $activated;
+    }
+
+    /**
+     * 헬퍼 함수들
+     */
+    private function getDefaultPatternState(int $count = 4): array {
+        return array_fill(0, $count, ["bettingtype" => "none", "bettringround" => 0, "bettingpos" => "", "isshow" => false, "lose" => 0, "measu" => 0, "icon" => ""]);
+    }
+    private function createPatternState(string $type, string $pos, int $mae, int $round): array {
+        return ["bettingtype" => $type, "bettingpos" => $pos, "isshow" => false, "measu" => $mae, "bettringround" => $round, "lose" => 0, "icon" => ""];
+    }
+    private function reverse(string $value): string {
+        return ($value === 'P') ? 'B' : 'P';
+    }
+}
+
+
+
+app/Http/Middleware/CheckIfBanned.php, 
+--------------------------------------
+class CheckIfBanned
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
+     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
+     */
+    public function handle(Request $request, Closure $next)
+    {
+        // 사용자가 로그인한 상태이고 (auth()->check()),
+        // 그 사용자의 banned_at 컬럼에 값이 있다면 (차단되었다면)
+        if (Auth::check() && Auth::user()->banned_at) {
+            
+            // 1. 현재 사용자를 강제 로그아웃 시킵니다.
+            Auth::logout();
+
+            // 2. 현재 요청의 세션을 무효화하고 토큰을 재생성합니다. (보안 강화)
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            // 3. 'error'라는 이름의 일회용 메시지와 함께 로그인 페이지로 돌려보냅니다.
+            return redirect()->route('login')->with('error', '귀하의 계정은 접근이 차단되었습니다.');
+        }
+
+        // 차단되지 않았다면, 원래 가려던 길로 그냥 보냅니다.
+        return $next($request);
+    }
+}
+
+
+CheckUserApproval.php: 차단되었거나 승인 대기 중인 사용자의 접근을 제어하는 커스텀 미들웨어입니다.
+------------------------
+class CheckUserApproval
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
+     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
+     */
+    public function handle(Request $request, Closure $next)
+    {
+        // 1. 로그인한 사용자가 'Level 1' 역할을 가지고 있는지 확인합니다.
+        // 2. 그리고, 현재 접속하려는 페이지가 '승인 대기' 페이지가 아닌지 확인합니다. (무한 리디렉션 방지)
+        if (Auth::check() && $request->user()->hasRole('Level 1') && !$request->routeIs('approval.pending')) {
+            
+            // 위 조건이 모두 참이면, '승인 대기' 페이지로 강제 이동시킵니다.
+            return redirect()->route('approval.pending');
+        }
+
+        // 위 조건에 해당하지 않는 사용자(Admin, Level 2 이상)는 원래 가려던 길로 그냥 보냅니다.
+        return $next($request);
+    }
+}
+
+
+
+2. 데이터 모델 (app/Models/ 디렉토리)
+app/Models/User.php: 사용자 정보, 잔액, 권한 등을 관리하는 핵심 모델입니다.
+--------------------
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Lab404\Impersonate\Models\Impersonate;
+
+class User extends Authenticatable
+{
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes, Impersonate;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'banned_at',
+        'parent_id', // ★ 추가
+        'recommendation_code', // ★ 추가
+        'profit_percentage', // ★ 추가
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+    ];
+
+    /**
+     * 나의 상위 추천인 (부모) 정보를 가져오는 관계
+     */
+    public function parent()
+    {
+        return $this->belongsTo(User::class, 'parent_id');
+    }
+
+    /**
+     * 내가 추천한 모든 하위 사용자 (자식) 목록을 가져오는 관계
+     */
+    public function children()
+    {
+        return $this->hasMany(User::class, 'parent_id');
+    }
+
+    /**
+     * 나의 모든 하위 조직원 (자손) 목록을 가져오는 관계
+     */
+    public function descendants()
+    {
+        // children 관계를 가져오고, 그 children의 children을 다시 재귀적으로 가져옵니다.
+        return $this->children()->with('descendants');
+    }
+
+    /**
+     * 나의 모든 상위 추천인 (조상) 목록을 가져옵니다.
+     */
+    public function ancestors()
+    {
+        $ancestors = collect([]); // 빈 컬렉션을 만듭니다.
+        $parent = $this->parent; // 나의 직속 부모부터 시작합니다.
+
+        // 부모가 더 이상 없을 때까지 (최상위 조직에 도달할 때까지) 반복합니다.
+        while ($parent) {
+            $ancestors->push($parent); // 현재 부모를 목록에 추가합니다.
+            $parent = $parent->parent; // 그 부모의 부모를 찾아서 다음 반복을 준비합니다.
+        }
+
+        return $ancestors;
+    }
+}
+
+
+app/Models/BacaraDb.php: 바카라 게임의 매 라운드 결과를 저장하는 모델입니다.
+--------------------------
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class BacaraDb extends Model
+{
+    use HasFactory;
+
+    /**
+     * 모델과 연결된 테이블 이름
+     * @var string
+     */
+    protected $table = 'bacaradb';
+
+    /**
+     * 테이블의 기본 키(Primary Key)
+     * @var string
+     */
+    protected $primaryKey = 'idx';
+
+    /**
+     * created_at 및 updated_at 타임스탬프를 사용하지 않음
+     * @var bool
+     */
+    public $timestamps = false;
+
+    /**
+     * 대량 할당이 가능한 속성
+     * @var array
+     */
+    protected $fillable = [
+        'memberid',
+        'dayinfo',
+        'bcdata',
+        'basetable',
+        'pattern_3',
+        'pattern_4',
+        'pattern_5',
+        'pattern_6',
+        'ptn',
+        'ptnhistory',
+        'baseresult',
+        'coininfo',
+        'chartResult',
+        'pattern_stats',
+        'logic_state',
+        'logic3_patterns',
+        'analytics_data',
+    ];
+
+    /**
+     * 네이티브 타입으로 캐스팅해야 하는 속성
+     * @var array
+     */
+    protected $casts = [
+        // JSON으로 저장된 텍스트를 자동으로 PHP 배열/객체로 변환
+        'coininfo' => 'array',
+        'chartResult' => 'array',
+        'pattern_stats' => 'array',
+        'logic_state' => 'array',
+        'logic3_patterns' => 'array',
+        'analytics_data' => 'array',
+        'pattern_3' => 'array',
+        'pattern_4' => 'array',
+        'pattern_5' => 'array',
+        'pattern_6' => 'array',
+    ];
+
+    /**
+     * User 모델과의 관계 (BacaraDb는 User에 속한다)
+     */
+    public function user()
+    {
+        // memberid 컬럼과 users 테이블의 name 컬럼을 기준으로 연결
+        return $this->belongsTo(User::class, 'memberid', 'name');
+    }
+}
+
+
+
+
+app/Models/BaccaraConfig.php: 바카라 게임의 설정값(수수료, 로직 설정 등)을 관리하는 모델입니다.
+------------------------------
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class BaccaraConfig extends Model
+{
+    use HasFactory;
+
+    use HasFactory;
+    protected $table = 'baccara_config';
+    protected $primaryKey = 'bc_id';
+    public $timestamps = false;
+    protected $fillable = [
+        'logic3_patterns',
+        'profit_rate',
+        'another_setting',
+    ];
+    protected $casts = [
+        'logic3_patterns' => 'array',
+        'profit_rate' => 'array',
+    ];
+}
+
+
+
+app/Models/Logic2Pattern.php: 예측 로직 패턴 데이터를 관리하는 모델입니다.
+---------------------------------------
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Logic2Pattern extends Model
+{
+    use HasFactory;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'logic2_patterns';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'name',
+        'description',
+        'sequence',
+        'is_active',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        // 'sequence' 컬럼의 JSON 데이터를 자동으로 PHP 배열로 변환해줍니다.
+        'sequence' => 'array',
+        'is_active' => 'boolean',
+    ];
+}
+
+
+
+app/Models/Ticket3.php ~ Ticket6.php: 게임의 특정 결과(예: 3매치, 4매치 등)나 베팅 종류를 나타내는 모델로 보입니다.
+--------------------------------------
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Ticket3 extends Model
+{
+    use HasFactory;
+
+    protected $table = '3ticket';
+    protected $primaryKey = 'idx';
+    public $timestamps = false;
+
+    protected $fillable = [
+        'memberid',
+        '_pattern',
+        'tpattern',
+        'upattern',
+        'npattern',
+    ];
+
+    protected $casts = [
+        '_pattern' => 'array',
+        'tpattern' => 'array',
+        'upattern' => 'array',
+        'npattern' => 'array',
+    ];
+}
+
+
+
+3. 라우팅 (routes/ 디렉토리)
+routes/web.php: 웹 브라우저를 통해 접근하는 모든 URL 경로를 정의합니다. (예: 게임 페이지, 관리자 페이지)
+-----------------
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\System\UserController as SystemUserController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\System\DashboardController as SystemDashboardController;
+use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Admin\Logic3PatternController;
+use App\Http\Controllers\Admin\Logic2PatternController;
+use App\Http\Controllers\BacaraController;
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| 모든 웹 요청에 대한 경로를 정의합니다.
+|
+*/
+
+// --- 1. 로그인한 사용자만 접근 가능한 경로 그룹 ---
+Route::middleware('auth')->group(function () {
+
+    // 1-1. 로그인 후 모든 사용자가 처음 도착하는 단일 진입점입니다.
+    // HomeController가 사용자의 레벨을 보고 알아서 올바른 페이지로 보내거나, 직접 뷰를 보여줍니다.
+    Route::get('/', [HomeController::class, 'index'])->middleware('check.approval')->name('home');
+    Route::get('/dashboard', [HomeController::class, 'index'])->middleware('check.approval')->name('dashboard');
+
+    // 1-2. Level 3~9 사용자들이 최종적으로 보게 될 페이지입니다.
+    Route::get('/system', SystemDashboardController::class)->middleware('check.approval')->name('system.dashboard');
+
+    // 1-3. '승인 대기' 페이지 (변경 없음)
+    Route::get('/approval-pending', function() {
+        if (!auth()->user()->hasRole('Level 1')) {
+            return redirect()->route('dashboard');
+        }
+        return view('auth.approval-pending');
+    })->name('approval.pending');
+    
+    // 1-4. 하트비트 경로 (변경 없음)
+    Route::get('/check-status', function () {
+        $user = auth()->user();
+        if (!$user || $user->banned_at || $user->trashed()) {
+            return response()->json(['status' => 'unauthenticated'], 401);
+        }
+        return response()->json(['status' => 'authenticated']);
+    })->name('check.status');
+
+    // 1-5. '시스템' 사용자 (Level 3~9) 전용 조직 관리 그룹 (변경 없음)
+    Route::middleware(['role:Level 3|Level 4|Level 5|Level 6|Level 7|Level 8|Level 9'])
+        ->prefix('system')->name('system.')->group(function () {
+            Route::get('/users', [SystemUserController::class, 'index'])->name('users.index');
+            Route::get('/users/create', [SystemUserController::class, 'create'])->name('users.create');
+            Route::post('/users', [SystemUserController::class, 'store'])->name('users.store');
+            Route::get('/users/{user}/impersonate', [SystemUserController::class, 'impersonate'])->name('users.impersonate');
+    });
+
+    // 1-6. 'Admin' 역할 전용 관리자 그룹 (변경 없음)
+    Route::middleware('role:Admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::resource('/users', AdminUserController::class)->except(['show']);
+        Route::post('/users/{user}/ban', [AdminUserController::class, 'ban'])->name('users.ban');
+        Route::post('/users/{user}/unban', [AdminUserController::class, 'unban'])->name('users.unban');
+        Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore')->withTrashed();
+        Route::get('/logic3', [Logic3PatternController::class, 'edit'])->name('logic3.edit');
+        Route::put('/logic3', [Logic3PatternController::class, 'update'])->name('logic3.update');
+        Route::resource('/logic2', Logic2PatternController::class);
+    });
+
+    // 1-7. 오직 'Level 2' 사용자만 접근 가능한 바카라 시스템 그룹 (변경 없음)
+    Route::middleware(['check.approval', 'role:Level 2'])
+        ->prefix('bacara')->name('bacara.')->group(function () {
+            Route::get('/create', [BacaraController::class, 'create'])->name('create');
+            Route::post('/', [BacaraController::class, 'store'])->name('store');
+    });
+
+});
+
+// --- 2. 로그인하지 않은 사용자만 접근 가능한 경로들 (변경 없음) ---
+Route::middleware('guest')->group(function() {
+    Route::get('register', [RegisteredUserController::class, 'showCodeRequestForm'])->name('register');
+    Route::post('register', [RegisteredUserController::class, 'processCode']);
+    Route::get('register/{code}', [RegisteredUserController::class, 'create'])->name('register.via_code');
+    Route::post('registration', [RegisteredUserController::class, 'store'])->name('registration.store');
+});
+
+
+// --- 3. Breeze가 제공하는 나머지 인증 경로 (로그인, 로그아웃 등) ---
+require __DIR__.'/auth.php';
+
+
+
+
+
+routes/api.php: 외부 시스템이나 프론트엔드에서 데이터를 요청할 때 사용하는 API 경로를 정의합니다.
+---------------
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\BacaraAnalyticsController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| is assigned the "api" middleware group. Enjoy building your API!
+|
+*/
+
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
+
+
+Route::post('/analyze-baccarat', [BacaraAnalyticsController::class, 'analyze'])
+    ->middleware('auth:sanctum'); // 로그인한 사용자만 이 API를 호출할 수 있도록 보호
+
+
+
+
+
+routes/channels.php: 실시간 데이터 전송(브로드캐스팅)을 위한 웹소켓 채널을 정의합니다.
+-----------------------
+<?php
+
+use Illuminate\Support\Facades\Broadcast;
+
+/*
+|--------------------------------------------------------------------------
+| Broadcast Channels
+|--------------------------------------------------------------------------
+|
+| Here you may register all of the event broadcasting channels that your
+| application supports. The given channel authorization callbacks are
+| used to check if an authenticated user can listen to the channel.
+|
+*/
+
+Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});
+
+
+
+routes/auth.php: 로그인, 회원가입 등 인증 관련 라우트를 포함합니다.
+------------------
+<?php
+
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\ConfirmablePasswordController;
+use App\Http\Controllers\Auth\EmailVerificationNotificationController;
+use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\ProfileController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('guest')->group(function () {
+    Route::get('register', [RegisteredUserController::class, 'create'])
+                ->name('register');
+
+    Route::post('register', [RegisteredUserController::class, 'store']);
+
+    Route::get('login', [AuthenticatedSessionController::class, 'create'])
+                ->name('login');
+
+    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+
+    Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
+                ->name('password.request');
+
+    Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+                ->name('password.email');
+
+    Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
+                ->name('password.reset');
+
+    Route::post('reset-password', [NewPasswordController::class, 'store'])
+                ->name('password.update');
+});
+
+Route::middleware('auth')->group(function () {
+    Route::get('verify-email', [EmailVerificationPromptController::class, '__invoke'])
+                ->name('verification.notice');
+
+    Route::get('verify-email/{id}/{hash}', [VerifyEmailController::class, '__invoke'])
+                ->middleware(['signed', 'throttle:6,1'])
+                ->name('verification.verify');
+
+    Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
+                ->middleware('throttle:6,1')
+                ->name('verification.send');
+
+    Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
+                ->name('password.confirm');
+
+    Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
+
+    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
+                ->name('logout');
+
+    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+
+
+4. 데이터베이스 구조 (database/ 디렉토리)
+database/migrations/ 디렉토리의 모든 PHP 파일: users, baccara_config, bacaradb, logic2_patterns 등 데이터베이스 테이블의 구조를 정의하는 모든 마이그레이션 파일이 필요합니다.
+-------------------------
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateUsersTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('users');
+    }
+}
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreatePasswordResetsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('password_resets', function (Blueprint $table) {
+            $table->string('email')->index();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('password_resets');
+    }
+}
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateFailedJobsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('failed_jobs');
+    }
+}
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreatePersonalAccessTokensTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+}
+
+
+<?php
+
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+use Spatie\Permission\PermissionRegistrar;
+
+class CreatePermissionTables extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        $tableNames = config('permission.table_names');
+        $columnNames = config('permission.column_names');
+        $teams = config('permission.teams');
+
+        if (empty($tableNames)) {
+            throw new \Exception('Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        }
+        if ($teams && empty($columnNames['team_foreign_key'] ?? null)) {
+            throw new \Exception('Error: team_foreign_key on config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        }
+
+        Schema::create($tableNames['permissions'], function (Blueprint $table) {
+            $table->bigIncrements('id'); // permission id
+            $table->string('name');       // For MySQL 8.0 use string('name', 125);
+            $table->string('guard_name'); // For MySQL 8.0 use string('guard_name', 125);
+            $table->timestamps();
+
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], function (Blueprint $table) use ($teams, $columnNames) {
+            $table->bigIncrements('id'); // role id
+            if ($teams || config('permission.testing')) { // permission.testing is a fix for sqlite testing
+                $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable();
+                $table->index($columnNames['team_foreign_key'], 'roles_team_foreign_key_index');
+            }
+            $table->string('name');       // For MySQL 8.0 use string('name', 125);
+            $table->string('guard_name'); // For MySQL 8.0 use string('guard_name', 125);
+            $table->timestamps();
+            if ($teams || config('permission.testing')) {
+                $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
+            } else {
+                $table->unique(['name', 'guard_name']);
+            }
+        });
+
+        Schema::create($tableNames['model_has_permissions'], function (Blueprint $table) use ($tableNames, $columnNames, $teams) {
+            $table->unsignedBigInteger(PermissionRegistrar::$pivotPermission);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->foreign(PermissionRegistrar::$pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], PermissionRegistrar::$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            } else {
+                $table->primary([PermissionRegistrar::$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            }
+
+        });
+
+        Schema::create($tableNames['model_has_roles'], function (Blueprint $table) use ($tableNames, $columnNames, $teams) {
+            $table->unsignedBigInteger(PermissionRegistrar::$pivotRole);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+
+            $table->foreign(PermissionRegistrar::$pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], PermissionRegistrar::$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            } else {
+                $table->primary([PermissionRegistrar::$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            }
+        });
+
+        Schema::create($tableNames['role_has_permissions'], function (Blueprint $table) use ($tableNames) {
+            $table->unsignedBigInteger(PermissionRegistrar::$pivotPermission);
+            $table->unsignedBigInteger(PermissionRegistrar::$pivotRole);
+
+            $table->foreign(PermissionRegistrar::$pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+
+            $table->foreign(PermissionRegistrar::$pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+
+            $table->primary([PermissionRegistrar::$pivotPermission, PermissionRegistrar::$pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
+
+        app('cache')
+            ->store(config('permission.cache.store') != 'default' ? config('permission.cache.store') : null)
+            ->forget(config('permission.cache.key'));
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        $tableNames = config('permission.table_names');
+
+        if (empty($tableNames)) {
+            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+        }
+
+        Schema::drop($tableNames['role_has_permissions']);
+        Schema::drop($tableNames['model_has_roles']);
+        Schema::drop($tableNames['model_has_permissions']);
+        Schema::drop($tableNames['roles']);
+        Schema::drop($tableNames['permissions']);
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateBaccaraConfigTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('baccara_config', function (Blueprint $table) {
+            $table->integer('bc_id')->default(1)->primary();
+            $table->text('logic3_patterns')->nullable();
+            $table->text('profit_rate')->nullable();
+            $table->string('another_setting')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('baccara_config');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateBacaradbTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('bacaradb', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique('unique_memberid');
+            $table->string('dayinfo', 10)->nullable()->default('0');
+            $table->string('bcdata', 1000);
+            $table->string('basetable', 1000);
+            $table->string('pattern_3', 1000)->comment('3Pattern');
+            $table->string('pattern_4', 1000)->comment('4Pattern');
+            $table->string('pattern_5', 1000)->comment('5Pattern');
+            $table->string('pattern_6', 1000)->comment('6Pattern');
+            $table->string('ptn', 1000);
+            $table->text('ptnhistory');
+            $table->string('baseresult', 1000)->default('');
+            $table->string('coininfo', 1000)->default('');
+            $table->longText('chartResult')->nullable();
+            $table->text('pattern_stats')->nullable();
+            $table->text('logic_state')->nullable();
+            $table->text('logic3_patterns')->nullable();
+            $table->longText('analytics_data')->nullable()->comment('각 로직의 성과 분석 데이터 (JSON)');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('bacaradb');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateClslogTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('clslog', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('gubun', 50)->nullable()->comment('로그 구분');
+            $table->text('log')->nullable()->comment('로그 내용');
+            $table->timestamp('log_datetime')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('clslog');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class Create3ticketTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('3ticket', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique();
+            $table->string('_pattern', 100)->nullable()->default('0');
+            $table->string('tpattern', 100)->nullable()->default('0');
+            $table->string('upattern', 100)->nullable()->default('0');
+            $table->string('npattern', 100)->nullable()->default('0');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('3ticket');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class Create4ticketTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('4ticket', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique();
+            $table->string('_pattern', 100)->nullable()->default('0');
+            $table->string('tpattern', 100)->nullable()->default('0');
+            $table->string('upattern', 100)->nullable()->default('0');
+            $table->string('npattern', 100)->nullable()->default('0');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('4ticket');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class Create4ticketTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('4ticket', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique();
+            $table->string('_pattern', 100)->nullable()->default('0');
+            $table->string('tpattern', 100)->nullable()->default('0');
+            $table->string('upattern', 100)->nullable()->default('0');
+            $table->string('npattern', 100)->nullable()->default('0');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('4ticket');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class Create5ticketTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('5ticket', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique();
+            $table->string('_pattern', 100)->nullable()->default('0');
+            $table->string('tpattern', 100)->nullable()->default('0');
+            $table->string('upattern', 100)->nullable()->default('0');
+            $table->string('npattern', 100)->nullable()->default('0');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('5ticket');
+    }
+}
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class Create6ticketTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('6ticket', function (Blueprint $table) {
+            $table->id('idx');
+            $table->string('memberid', 50)->default('0')->unique();
+            $table->string('_pattern', 100)->nullable()->default('0');
+            $table->string('tpattern', 100)->nullable()->default('0');
+            $table->string('upattern', 100)->nullable()->default('0');
+            $table->string('npattern', 100)->nullable()->default('0');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('6ticket');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddBannedAtToUsersTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->timestamp('banned_at')->nullable()->after('remember_token');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('banned_at');
+        });
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddSoftDeletesToUsersTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->softDeletes()->after('banned_at');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropSoftDeletes();
+        });
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddReferralFieldsToUsersTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            // 나를 추천한 사람의 ID (상위 추천인)
+            // users 테이블의 id를 참조하는 외래 키(Foreign Key)로 설정합니다.
+            $table->foreignId('parent_id')->nullable()->after('id')->constrained('users')->onDelete('set null');
+
+            // 나의 고유 추천인 코드 (중복되면 안 됨)
+            $table->string('recommendation_code')->unique()->nullable()->after('name');
+
+            // 나의 수익률 (%)
+            $table->decimal('profit_percentage', 5, 2)->default(0.00)->after('recommendation_code');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('users', function (Blueprint $table) {
+            // 외래 키 제약 조건을 먼저 제거해야 컬럼 삭제가 가능합니다.
+            $table->dropForeign(['parent_id']);
+            $table->dropColumn(['parent_id', 'recommendation_code', 'profit_percentage']);
+        });
+    }
+}
+
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateLogic2PatternsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('logic2_patterns', function (Blueprint $table) {
+            $table->id(); // 각 패턴의 고유 ID
+            $table->string('name')->unique(); // 패턴의 이름 (예: "패턴 A", "패턴 B")
+            $table->string('description')->nullable(); // 패턴에 대한 설명
+            $table->json('sequence'); // 패턴 규칙 (예: [1, -1, 1, 1])을 JSON 형태로 저장
+            $table->boolean('is_active')->default(true); // 이 패턴을 사용할지 여부 (On/Off)
+            $table->timestamps(); // 생성 및 수정 시간 자동 기록
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('logic2_patterns');
+    }
+}
+
+
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddLogic2SettingsToBaccaraConfigTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('baccara_config', function (Blueprint $table) {
+            $table->boolean('logic2_enabled')->default(true)->after('bc_id');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('baccara_config', function (Blueprint $table) {
+            $table->dropColumn('logic2_enabled');
+        });
+    }
+}
+
+
+database/seeders/ 디렉토리의 모든 PHP 파일: 초기 관리자 계정, 역할(Role), 권한(Permission) 등 시스템 운영에 필요한 초기 데이터를 생성하는 시더 파일들입니다.
+---------------------------------
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\User;
+use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Hash;
+
+class AdminUserSeeder extends Seeder
+{
+    public function run()
+    {
+        $adminUser = User::create([
+            'name' => 'admin',
+            'email' => 'admin@domain.com',
+            'password' => Hash::make('eoqkr007'),
+        ]);
+
+        $adminRole = Role::findByName('Admin');
+        $adminUser->assignRole($adminRole);
+    }
+}
+
+
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run()
+    {
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            AdminUserSeeder::class,
+        ]);
+    }
+}
+
+
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
+
+class RolesAndPermissionsSeeder extends Seeder
+{
+    public function run()
+    {
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        Role::create(['name' => 'Admin']);
+        Role::create(['name' => 'Level 1']);
+
+        for ($i = 2; $i <= 9; $i++) {
+            Role::create(['name' => 'Level ' . $i]);
+        }
+    }
+}
+
+
+
+5. 설정 파일 (config/ 디렉토리)
+config/database.php: 데이터베이스 연결 정보를 설정합니다.
+--------------------
+<?php
+
+use Illuminate\Support\Str;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Database Connection Name
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify which of the database connections below you wish
+    | to use as your default connection for all database work. Of course
+    | you may use many connections at once using the Database library.
+    |
+    */
+
+    'default' => env('DB_CONNECTION', 'mysql'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Database Connections
+    |--------------------------------------------------------------------------
+    |
+    | Here are each of the database connections setup for your application.
+    | Of course, examples of configuring each database platform that is
+    | supported by Laravel is shown below to make development simple.
+    |
+    |
+    | All database work in Laravel is done through the PHP PDO facilities
+    | so make sure you have the driver for your particular database of
+    | choice installed on your machine before you begin development.
+    |
+    */
+
+    'connections' => [
+
+        'sqlite' => [
+            'driver' => 'sqlite',
+            'url' => env('DATABASE_URL'),
+            'database' => env('DB_DATABASE', database_path('database.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+        ],
+
+        'mysql' => [
+            'driver' => 'mysql',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
+        'pgsql' => [
+            'driver' => 'pgsql',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'schema' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
+        'sqlsrv' => [
+            'driver' => 'sqlsrv',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', 'localhost'),
+            'port' => env('DB_PORT', '1433'),
+            'database' => env('DB_DATABASE', 'forge'),
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Migration Repository Table
+    |--------------------------------------------------------------------------
+    |
+    | This table keeps track of all the migrations that have already run for
+    | your application. Using this information, we can determine which of
+    | the migrations on disk haven't actually been run in the database.
+    |
+    */
+
+    'migrations' => 'migrations',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Redis Databases
+    |--------------------------------------------------------------------------
+    |
+    | Redis is an open source, fast, and advanced key-value store that also
+    | provides a richer body of commands than a typical key-value system
+    | such as APC or Memcached. Laravel makes it easy to dig right in.
+    |
+    */
+
+    'redis' => [
+
+        'client' => env('REDIS_CLIENT', 'phpredis'),
+
+        'options' => [
+            'cluster' => env('REDIS_CLUSTER', 'redis'),
+            'prefix' => env('REDIS_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_database_'),
+        ],
+
+        'default' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'password' => env('REDIS_PASSWORD', null),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+        ],
+
+        'cache' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'password' => env('REDIS_PASSWORD', null),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_CACHE_DB', '1'),
+        ],
+
+    ],
+
+];
+
+
+config/broadcasting.php: 실시간 통신을 위한 웹소켓 설정을 정의합니다.
+-------------------------
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Broadcaster
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the default broadcaster that will be used by the
+    | framework when an event needs to be broadcast. You may set this to
+    | any of the connections defined in the "connections" array below.
+    |
+    | Supported: "pusher", "ably", "redis", "log", "null"
+    |
+    */
+
+    'default' => env('BROADCAST_DRIVER', 'null'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Broadcast Connections
+    |--------------------------------------------------------------------------
+    |
+    | Here you may define all of the broadcast connections that will be used
+    | to broadcast events to other systems or over websockets. Samples of
+    | each available type of connection are provided inside this array.
+    |
+    */
+
+    'connections' => [
+
+        'pusher' => [
+            'driver' => 'pusher',
+            'key' => env('PUSHER_APP_KEY'),
+            'secret' => env('PUSHER_APP_SECRET'),
+            'app_id' => env('PUSHER_APP_ID'),
+            'options' => [
+                'cluster' => env('PUSHER_APP_CLUSTER'),
+                'useTLS' => true,
+            ],
+        ],
+
+        'ably' => [
+            'driver' => 'ably',
+            'key' => env('ABLY_KEY'),
+        ],
+
+        'redis' => [
+            'driver' => 'redis',
+            'connection' => 'default',
+        ],
+
+        'log' => [
+            'driver' => 'log',
+        ],
+
+        'null' => [
+            'driver' => 'null',
+        ],
+
+    ],
+
+];
+
+
+
+
+
+config/permission.php: spatie/laravel-permission 패키지를 사용한 역할 및 권한 설정을 정의합니다.
+-------------------------
+<?php
+
+return [
+
+    'models' => [
+
+        /*
+         * When using the "HasPermissions" trait from this package, we need to know which
+         * Eloquent model should be used to retrieve your permissions. Of course, it
+         * is often just the "Permission" model but you may use whatever you like.
+         *
+         * The model you want to use as a Permission model needs to implement the
+         * `Spatie\Permission\Contracts\Permission` contract.
+         */
+
+        'permission' => Spatie\Permission\Models\Permission::class,
+
+        /*
+         * When using the "HasRoles" trait from this package, we need to know which
+         * Eloquent model should be used to retrieve your roles. Of course, it
+         * is often just the "Role" model but you may use whatever you like.
+         *
+         * The model you want to use as a Role model needs to implement the
+         * `Spatie\Permission\Contracts\Role` contract.
+         */
+
+        'role' => Spatie\Permission\Models\Role::class,
+
+    ],
+
+    'table_names' => [
+
+        /*
+         * When using the "HasRoles" trait from this package, we need to know which
+         * table should be used to retrieve your roles. We have chosen a basic
+         * default value but you may easily change it to any table you like.
+         */
+
+        'roles' => 'roles',
+
+        /*
+         * When using the "HasPermissions" trait from this package, we need to know which
+         * table should be used to retrieve your permissions. We have chosen a basic
+         * default value but you may easily change it to any table you like.
+         */
+
+        'permissions' => 'permissions',
+
+        /*
+         * When using the "HasPermissions" trait from this package, we need to know which
+         * table should be used to retrieve your models permissions. We have chosen a
+         * basic default value but you may easily change it to any table you like.
+         */
+
+        'model_has_permissions' => 'model_has_permissions',
+
+        /*
+         * When using the "HasRoles" trait from this package, we need to know which
+         * table should be used to retrieve your models roles. We have chosen a
+         * basic default value but you may easily change it to any table you like.
+         */
+
+        'model_has_roles' => 'model_has_roles',
+
+        /*
+         * When using the "HasRoles" trait from this package, we need to know which
+         * table should be used to retrieve your roles permissions. We have chosen a
+         * basic default value but you may easily change it to any table you like.
+         */
+
+        'role_has_permissions' => 'role_has_permissions',
+    ],
+
+    'column_names' => [
+        /*
+         * Change this if you want to name the related pivots other than defaults
+         */
+        'role_pivot_key' => null, //default 'role_id',
+        'permission_pivot_key' => null, //default 'permission_id',
+
+        /*
+         * Change this if you want to name the related model primary key other than
+         * `model_id`.
+         *
+         * For example, this would be nice if your primary keys are all UUIDs. In
+         * that case, name this `model_uuid`.
+         */
+
+        'model_morph_key' => 'model_id',
+
+        /*
+         * Change this if you want to use the teams feature and your related model's
+         * foreign key is other than `team_id`.
+         */
+
+        'team_foreign_key' => 'team_id',
+    ],
+
+    /*
+     * When set to true, the method for checking permissions will be registered on the gate.
+     * Set this to false, if you want to implement custom logic for checking permissions.
+     */
+
+    'register_permission_check_method' => true,
+
+    /*
+     * When set to true the package implements teams using the 'team_foreign_key'. If you want
+     * the migrations to register the 'team_foreign_key', you must set this to true
+     * before doing the migration. If you already did the migration then you must make a new
+     * migration to also add 'team_foreign_key' to 'roles', 'model_has_roles', and
+     * 'model_has_permissions'(view the latest version of package's migration file)
+     */
+
+    'teams' => false,
+
+    /*
+     * When set to true, the required permission names are added to the exception
+     * message. This could be considered an information leak in some contexts, so
+     * the default setting is false here for optimum safety.
+     */
+
+    'display_permission_in_exception' => false,
+
+    /*
+     * When set to true, the required role names are added to the exception
+     * message. This could be considered an information leak in some contexts, so
+     * the default setting is false here for optimum safety.
+     */
+
+    'display_role_in_exception' => false,
+
+    /*
+     * By default wildcard permission lookups are disabled.
+     */
+
+    'enable_wildcard_permission' => false,
+
+    'cache' => [
+
+        /*
+         * By default all permissions are cached for 24 hours to speed up performance.
+         * When permissions or roles are updated the cache is flushed automatically.
+         */
+
+        'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+
+        /*
+         * The cache key used to store all permissions.
+         */
+
+        'key' => 'spatie.permission.cache',
+
+        /*
+         * You may optionally indicate a specific cache driver to use for permission and
+         * role caching using any of the `store` drivers listed in the cache.php config
+         * file. Using 'default' here means to use the `default` set in cache.php.
+         */
+
+        'store' => 'default',
+    ],
+];
+
+
+
+
+config/app.php: 애플리케이션의 시간대, 로케일 등 전반적인 설정을 정의합니다.
+----------------
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Name
+    |--------------------------------------------------------------------------
+    |
+    | This value is the name of your application. This value is used when the
+    | framework needs to place the application's name in a notification or
+    | any other location as required by the application or its packages.
+    |
+    */
+
+    'name' => env('APP_NAME', 'Laravel'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Environment
+    |--------------------------------------------------------------------------
+    |
+    | This value determines the "environment" your application is currently
+    | running in. This may determine how you prefer to configure various
+    | services the application utilizes. Set this in your ".env" file.
+    |
+    */
+
+    'env' => env('APP_ENV', 'production'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Debug Mode
+    |--------------------------------------------------------------------------
+    |
+    | When your application is in debug mode, detailed error messages with
+    | stack traces will be shown on every error that occurs within your
+    | application. If disabled, a simple generic error page is shown.
+    |
+    */
+
+    'debug' => (bool) env('APP_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application URL
+    |--------------------------------------------------------------------------
+    |
+    | This URL is used by the console to properly generate URLs when using
+    | the Artisan command line tool. You should set this to the root of
+    | your application so that it is used when running Artisan tasks.
+    |
+    */
+
+    'url' => env('APP_URL', 'http://localhost'),
+
+    'asset_url' => env('ASSET_URL', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify the default timezone for your application, which
+    | will be used by the PHP date and date-time functions. We have gone
+    | ahead and set this to a sensible default for you out of the box.
+    |
+    */
+
+    'timezone' => 'Asia/Seoul',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Locale Configuration
+    |--------------------------------------------------------------------------
+    |
+    | The application locale determines the default locale that will be used
+    | by the translation service provider. You are free to set this value
+    | to any of the locales which will be supported by the application.
+    |
+    */
+
+    'locale' => 'ko',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Fallback Locale
+    |--------------------------------------------------------------------------
+    |
+    | The fallback locale determines the locale to use when the current one
+    | is not available. You may change the value to correspond to any of
+    | the language folders that are provided through your application.
+    |
+    */
+
+    'fallback_locale' => 'en',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Faker Locale
+    |--------------------------------------------------------------------------
+    |
+    | This locale will be used by the Faker PHP library when generating fake
+    | data for your database seeds. For example, this will be used to get
+    | localized telephone numbers, street address information and more.
+    |
+    */
+
+    'faker_locale' => 'en_US',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Encryption Key
+    |--------------------------------------------------------------------------
+    |
+    | This key is used by the Illuminate encrypter service and should be set
+    | to a random, 32 character string, otherwise these encrypted strings
+    | will not be safe. Please do this before deploying an application!
+    |
+    */
+
+    'key' => env('APP_KEY'),
+
+    'cipher' => 'AES-256-CBC',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Autoloaded Service Providers
+    |--------------------------------------------------------------------------
+    |
+    | The service providers listed here will be automatically loaded on the
+    | request to your application. Feel free to add your own services to
+    | this array to grant expanded functionality to your applications.
+    |
+    */
+
+    'providers' => [
+
+        /*
+         * Laravel Framework Service Providers...
+         */
+        Illuminate\Auth\AuthServiceProvider::class,
+        Illuminate\Broadcasting\BroadcastServiceProvider::class,
+        Illuminate\Bus\BusServiceProvider::class,
+        Illuminate\Cache\CacheServiceProvider::class,
+        Illuminate\Foundation\Providers\ConsoleSupportServiceProvider::class,
+        Illuminate\Cookie\CookieServiceProvider::class,
+        Illuminate\Database\DatabaseServiceProvider::class,
+        Illuminate\Encryption\EncryptionServiceProvider::class,
+        Illuminate\Filesystem\FilesystemServiceProvider::class,
+        Illuminate\Foundation\Providers\FoundationServiceProvider::class,
+        Illuminate\Hashing\HashServiceProvider::class,
+        Illuminate\Mail\MailServiceProvider::class,
+        Illuminate\Notifications\NotificationServiceProvider::class,
+        Illuminate\Pagination\PaginationServiceProvider::class,
+        Illuminate\Pipeline\PipelineServiceProvider::class,
+        Illuminate\Queue\QueueServiceProvider::class,
+        Illuminate\Redis\RedisServiceProvider::class,
+        Illuminate\Auth\Passwords\PasswordResetServiceProvider::class,
+        Illuminate\Session\SessionServiceProvider::class,
+        Illuminate\Translation\TranslationServiceProvider::class,
+        Illuminate\Validation\ValidationServiceProvider::class,
+        Illuminate\View\ViewServiceProvider::class,
+
+        /*
+         * Package Service Providers...
+         */
+
+        /*
+         * Application Service Providers...
+         */
+        App\Providers\AppServiceProvider::class,
+        App\Providers\AuthServiceProvider::class,
+        // App\Providers\BroadcastServiceProvider::class,
+        App\Providers\EventServiceProvider::class,
+        App\Providers\RouteServiceProvider::class,
+        Spatie\Permission\PermissionServiceProvider::class,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Class Aliases
+    |--------------------------------------------------------------------------
+    |
+    | This array of class aliases will be registered when this application
+    | is started. However, feel free to register as many as you wish as
+    | the aliases are "lazy" loaded so they don't hinder performance.
+    |
+    */
+
+    'aliases' => [
+
+        'App' => Illuminate\Support\Facades\App::class,
+        'Arr' => Illuminate\Support\Arr::class,
+        'Artisan' => Illuminate\Support\Facades\Artisan::class,
+        'Auth' => Illuminate\Support\Facades\Auth::class,
+        'Blade' => Illuminate\Support\Facades\Blade::class,
+        'Broadcast' => Illuminate\Support\Facades\Broadcast::class,
+        'Bus' => Illuminate\Support\Facades\Bus::class,
+        'Cache' => Illuminate\Support\Facades\Cache::class,
+        'Config' => Illuminate\Support\Facades\Config::class,
+        'Cookie' => Illuminate\Support\Facades\Cookie::class,
+        'Crypt' => Illuminate\Support\Facades\Crypt::class,
+        'Date' => Illuminate\Support\Facades\Date::class,
+        'DB' => Illuminate\Support\Facades\DB::class,
+        'Eloquent' => Illuminate\Database\Eloquent\Model::class,
+        'Event' => Illuminate\Support\Facades\Event::class,
+        'File' => Illuminate\Support\Facades\File::class,
+        'Gate' => Illuminate\Support\Facades\Gate::class,
+        'Hash' => Illuminate\Support\Facades\Hash::class,
+        'Http' => Illuminate\Support\Facades\Http::class,
+        'Js' => Illuminate\Support\Js::class,
+        'Lang' => Illuminate\Support\Facades\Lang::class,
+        'Log' => Illuminate\Support\Facades\Log::class,
+        'Mail' => Illuminate\Support\Facades\Mail::class,
+        'Notification' => Illuminate\Support\Facades\Notification::class,
+        'Password' => Illuminate\Support\Facades\Password::class,
+        'Queue' => Illuminate\Support\Facades\Queue::class,
+        'RateLimiter' => Illuminate\Support\Facades\RateLimiter::class,
+        'Redirect' => Illuminate\Support\Facades\Redirect::class,
+        // 'Redis' => Illuminate\Support\Facades\Redis::class,
+        'Request' => Illuminate\Support\Facades\Request::class,
+        'Response' => Illuminate\Support\Facades\Response::class,
+        'Route' => Illuminate\Support\Facades\Route::class,
+        'Schema' => Illuminate\Support\Facades\Schema::class,
+        'Session' => Illuminate\Support\Facades\Session::class,
+        'Storage' => Illuminate\Support\Facades\Storage::class,
+        'Str' => Illuminate\Support\Str::class,
+        'URL' => Illuminate\Support\Facades\URL::class,
+        'Validator' => Illuminate\Support\Facades\Validator::class,
+        'View' => Illuminate\Support\Facades\View::class,
+
+    ],
+
+];
+
+
+
+6. 그 외 필수 프레임워크 파일
+artisan: 라라벨의 커맨드 라인 인터페이스(CLI) 실행 파일입니다.
+--------------
+#!/usr/bin/env php
+<?php
+
+define('LARAVEL_START', microtime(true));
+
+/*
+|--------------------------------------------------------------------------
+| Register The Auto Loader
+|--------------------------------------------------------------------------
+|
+| Composer provides a convenient, automatically generated class loader
+| for our application. We just need to utilize it! We'll require it
+| into the script here so that we do not have to worry about the
+| loading of any of our classes manually. It's great to relax.
+|
+*/
+
+require __DIR__.'/vendor/autoload.php';
+
+$app = require_once __DIR__.'/bootstrap/app.php';
+
+/*
+|--------------------------------------------------------------------------
+| Run The Artisan Application
+|--------------------------------------------------------------------------
+|
+| When we run the console application, the current CLI command will be
+| executed in this console and the response sent back to a terminal
+| or another output device for the developers. Here goes nothing!
+|
+*/
+
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+
+$status = $kernel->handle(
+    $input = new Symfony\Component\Console\Input\ArgvInput,
+    new Symfony\Component\Console\Output\ConsoleOutput
+);
+
+/*
+|--------------------------------------------------------------------------
+| Shutdown The Application
+|--------------------------------------------------------------------------
+|
+| Once Artisan has finished running, we will fire off the shutdown events
+| so that any final work may be done by the application before we shut
+| down the process. This is the last thing to happen to the request.
+|
+*/
+
+$kernel->terminate($input, $status);
+
+exit($status);
+
+
+
+
+bootstrap/app.php: 라라벨 애플리케이션을 초기화하고 부팅하는 파일입니다.
+--------------------
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Create The Application
+|--------------------------------------------------------------------------
+|
+| The first thing we will do is create a new Laravel application instance
+| which serves as the "glue" for all the components of Laravel, and is
+| the IoC container for the system binding all of the various parts.
+|
+*/
+
+$app = new Illuminate\Foundation\Application(
+    $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
+);
+
+/*
+|--------------------------------------------------------------------------
+| Bind Important Interfaces
+|--------------------------------------------------------------------------
+|
+| Next, we need to bind some important interfaces into the container so
+| we will be able to resolve them when needed. The kernels serve the
+| incoming requests to this application from both the web and CLI.
+|
+*/
+
+$app->singleton(
+    Illuminate\Contracts\Http\Kernel::class,
+    App\Http\Kernel::class
+);
+
+$app->singleton(
+    Illuminate\Contracts\Console\Kernel::class,
+    App\Console\Kernel::class
+);
+
+$app->singleton(
+    Illuminate\Contracts\Debug\ExceptionHandler::class,
+    App\Exceptions\Handler::class
+);
+
+/*
+|--------------------------------------------------------------------------
+| Return The Application
+|--------------------------------------------------------------------------
+|
+| This script returns the application instance. The instance is given to
+| the calling script so we can separate the building of the instances
+| from the actual running of the application and sending responses.
+|
+*/
+
+return $app;
+
+
+
+
+public/index.php: (해당 목록에는 없지만) 웹 서버의 요청을 가장 먼저 받아 처리하는 진입점 파일입니다.
+----------------
+<?php
+
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+
+define('LARAVEL_START', microtime(true));
+
+/*
+|--------------------------------------------------------------------------
+| Check If The Application Is Under Maintenance
+|--------------------------------------------------------------------------
+|
+| If the application is in maintenance / demo mode via the "down" command
+| we will load this file so that any pre-rendered content can be shown
+| instead of starting the framework, which could cause an exception.
+|
+*/
+
+if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
+    require $maintenance;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Register The Auto Loader
+|--------------------------------------------------------------------------
+|
+| Composer provides a convenient, automatically generated class loader for
+| this application. We just need to utilize it! We'll simply require it
+| into the script here so we don't need to manually load our classes.
+|
+*/
+
+require __DIR__.'/../vendor/autoload.php';
+
+/*
+|--------------------------------------------------------------------------
+| Run The Application
+|--------------------------------------------------------------------------
+|
+| Once we have the application, we can handle the incoming request using
+| the application's HTTP kernel. Then, we will send the response back
+| to this client's browser, allowing them to enjoy our application.
+|
+*/
+
+$app = require_once __DIR__.'/../bootstrap/app.php';
+
+$kernel = $app->make(Kernel::class);
+
+$response = $kernel->handle(
+    $request = Request::capture()
+)->send();
+
+$kernel->terminate($request, $response);
