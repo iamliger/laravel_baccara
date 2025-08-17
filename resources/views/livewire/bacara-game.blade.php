@@ -42,7 +42,7 @@
                     class="px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-black rounded-md text-sm shadow">취소</button>
             </div>
         </div>
-        
+
         {{-- ▼▼▼ 1. wire:ignore 추가 ▼▼▼ --}}
         {{-- 이 div는 이제 Livewire에 의해 자동으로 업데이트되지 않으며, 오직 JavaScript로만 제어됩니다. --}}
         <div wire:ignore id="main-roadmap-container"
@@ -50,7 +50,7 @@
             style="height: calc(var(--main-cell-size) * 6);">
             <div id="roadmap-grid"></div>
         </div>
-        
+
         {{-- ▼▼▼ 2. wire:ignore 추가 ▼▼▼ --}}
         <div wire:ignore class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             @for ($i = 3; $i <= 6; $i++)
@@ -61,7 +61,7 @@
                 </div>
             @endfor
         </div>
-        
+
         {{-- ▼▼▼ 3. wire:ignore 추가 ▼▼▼ --}}
         <div wire:ignore id="interactive-area" class="relative console-box-container">
             <button id="copy-log-btn" type="button">로그 복사</button>
@@ -75,7 +75,7 @@
                 class="absolute px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-lg z-10">차트
                 보기</button>
         </div>
-        
+
         {{-- 리셋, 로그아웃 버튼 영역 --}}
         <div class="flex flex-wrap justify-between items-center gap-2 mt-4">
             <button id="reset-btn"
@@ -106,7 +106,7 @@
                         class="modal-btn modal-btn-primary w-full">확인</button></div>
             </div>
         </div>
-        
+
         {{-- 환경 설정 모달 (HTML 구조는 그대로 유지) --}}
         <div id="setting-box-modal" class="modal-overlay hidden">
             <div class="modal-box">
@@ -212,24 +212,48 @@
             // -----------------------------
             // Livewire 이벤트 수신
             // -----------------------------
-            
+            function getIconForPattern(mae, subType) {
+                // ★★★ 이 부분에는 mae를 필터링하는 코드가 없어야 합니다. ★★★
+                // (이전 답변의 주석은 제 실수였으며, 현재 코드가 정확합니다.)
+
+                let iconClass = '';
+                switch (subType) {
+                    case '_pattern':
+                        iconClass = 'ti ti-line-dashed';
+                        break;
+                    case 'tpattern':
+                        iconClass = 'ti ti-letter-t-small';
+                        break;
+
+                    case 'upattern':
+                        iconClass = 'ti ti-letter-u-small';
+                        break;
+                    case 'npattern':
+                        iconClass = 'ti ti-letter-n-small';
+                        break;
+                    default:
+                        return ''; // 일치하는 아이콘이 없으면 빈 문자열 반환
+                }
+                return `<i class="${iconClass}" style="font-size: 1.1rem; margin-right: 4px;"></i>`;
+            }
+
             // ▼▼▼ 4. 'jokboUpdated' 리스너를 'itemAdded' 리스너로 교체 ▼▼▼
             // 서버에서 새로 추가된 아이템 정보만 받아서 클라이언트에서 처리합니다.
             Livewire.on('itemAdded', (data) => {
                 // 1. JavaScript가 관리하는 족보 히스토리 문자열에 새 결과를 추가합니다.
                 jokboHistory += data.type;
-                
+
                 // 2. 업데이트된 족보를 기반으로 모든 로드맵을 다시 그립니다.
                 //    이 함수는 DOM을 직접 조작하므로 빠르고 깜빡임이 없습니다.
                 redrawAllFromJokbo();
-                
+
                 // 3. 서버에서 받은 최신 카운트로 화면의 숫자를 업데이트합니다.
                 if (data.counts) {
                     el.playerCountSpan.textContent = data.counts.player;
                     el.bankerCountSpan.textContent = data.counts.banker;
                     el.totalCountSpan.textContent = data.counts.total;
                 }
-                
+
                 // 4. 변경된 족보 상태를 브라우저의 로컬 스토리지에 저장합니다.
                 saveState();
             });
@@ -238,7 +262,7 @@
             Livewire.on('itemRemoved', (data) => {
                 // 1. 족보 히스토리에서 마지막 글자를 제거합니다.
                 jokboHistory = jokboHistory.slice(0, -1);
-                
+
                 // 2. 단축된 족보를 기반으로 모든 로드맵을 다시 그립니다.
                 redrawAllFromJokbo();
 
@@ -248,27 +272,27 @@
                     el.bankerCountSpan.textContent = data.counts.banker;
                     el.totalCountSpan.textContent = data.counts.total;
                 }
-                
+
                 // 4. 변경된 상태를 저장합니다.
                 saveState();
             });
-            
+
             // 'reset' 액션에 대한 이벤트 리스너 추가
             Livewire.on('gameReset', () => {
                 jokboHistory = '';
                 moneyArrStep = [];
-                
+
                 redrawAllFromJokbo(); // 빈 족보로 그리므로 모든 그리드가 깨끗해집니다.
-                
+
                 el.playerCountSpan.textContent = 0;
                 el.bankerCountSpan.textContent = 0;
                 el.totalCountSpan.textContent = 0;
 
                 saveState(); // 빈 상태를 저장합니다.
-                
+
                 showToast('center-toast', '리셋이 완료되었습니다.', {
                     type: 'success', // 성공 타입 (초록색)
-                    duration: 1500,  // 1.5초 동안 표시
+                    duration: 1500, // 1.5초 동안 표시
                     onComplete: () => {
                         // 토스트가 사라진 후, 금액 설정 모달을 엽니다.
                         clearConsole();
@@ -292,10 +316,10 @@
             // -----------------------------
             function showToast(targetId, message, options = {}) {
                 const config = {
-                    type: 'info',       // 기본 타입
-                    duration: 2000,     // 기본 지속시간 2초
+                    type: 'info', // 기본 타입
+                    duration: 2000, // 기본 지속시간 2초
                     position: 'center', // 기본 위치 'center'
-                    onComplete: null,   // ★★★ 콜백 함수를 위한 옵션
+                    onComplete: null, // ★★★ 콜백 함수를 위한 옵션
                     ...options
                 };
 
@@ -304,13 +328,13 @@
                 if (previousToast) {
                     previousToast.remove();
                 }
-                
+
                 // 새로운 토스트 요소 생성
                 const toastElement = document.createElement('div');
                 toastElement.id = `toast-for-${targetId}`;
                 toastElement.className = `toast-base toast-type-${config.type} toast-position-${config.position}`;
                 toastElement.innerHTML = message;
-                
+
                 document.body.appendChild(toastElement);
 
                 // 애니메이션을 위해 잠시 후 등장 클래스 추가
@@ -321,7 +345,7 @@
                 // 설정된 시간 후 토스트 제거
                 setTimeout(() => {
                     toastElement.classList.remove('toast-visible');
-                    
+
                     // 사라지는 애니메이션(0.3초)이 끝난 후 DOM에서 완전히 제거하고 콜백 실행
                     toastElement.addEventListener('transitionend', () => {
                         toastElement.remove();
@@ -329,7 +353,9 @@
                         if (typeof config.onComplete === 'function') {
                             config.onComplete();
                         }
-                    }, { once: true }); // 이벤트는 한 번만 실행되도록 설정
+                    }, {
+                        once: true
+                    }); // 이벤트는 한 번만 실행되도록 설정
 
                 }, config.duration);
             }
@@ -361,7 +387,11 @@
                     coloredMessage = message.replace('뱅커', '<span class="banker-text">뱅커</span>');
                 }
 
-                const msgObj = { html: coloredMessage, type: type, timestamp: Date.now() };
+                const msgObj = {
+                    html: coloredMessage,
+                    type: type,
+                    timestamp: Date.now()
+                };
                 consoleMessages.push(msgObj);
                 const div = document.createElement('div');
                 div.innerHTML = coloredMessage;
@@ -545,23 +575,60 @@
             }
 
             function renderPrediction(data) {
+                // 예측 데이터가 없거나 비어있으면 헤더를 비웁니다.
                 if (!data || !data.predictions || data.predictions.length === 0) {
                     el.predictionHeader.innerHTML = '';
+                    // 예측이 없을 때 콘솔 추천 메시지도 남기지 않도록 수정
+                    logRecommendation([], data ? data.type : null);
                     return;
                 }
+
+                // 예측 데이터를 기반으로 HTML 문자열을 생성합니다.
                 const predictionHtml = data.predictions.map(p => {
                     if (!p.recommend) return '';
+
+                    // ★★★ 핵심 수정: p.mae와 p.sub_type을 모두 전달합니다. ★★★
+                    let iconHtml = '';
+                    if (data.type === 'logic1' && p.mae && p.sub_type) {
+                        iconHtml = getIconForPattern(p.mae, p.sub_type);
+                    }
+
                     const circleClass = p.recommend === 'P' ? 'player' : 'banker';
                     const amountString = (p.amount || 0).toLocaleString();
-                    const subTypeText = p.mae ? `[${p.mae}매]:` : `${p.sub_type}:`;
-                    return `<div class="prediction-item">${subTypeText} (${p.step}단계) <span class="baccarat-circle ${circleClass}">${p.recommend}</span> <strong>${amountString}</strong></div>`;
+                    
+                    // sub_type 텍스트를 더 명확하게 표시하도록 수정 (예: _pattern -> 패턴 1)
+                    // 여기서는 기존 방식을 유지하되, 필요시 서버에서 이름을 보내도록 변경할 수 있습니다.
+                    const subTypeText = p.mae ? `[${p.mae}매] ${p.sub_type}:` : `${p.sub_type}:`;
+
+                    // 아이콘 HTML을 메시지 앞에 추가합니다.
+                    return `<div class="prediction-item">${iconHtml}${subTypeText} (${p.step}단계) <span class="baccarat-circle ${circleClass}">${p.recommend}</span> <strong>${amountString}</strong></div>`;
                 }).join('');
+
                 el.predictionHeader.innerHTML = predictionHtml;
-                const recommendationHtml = data.predictions.filter(p => p.recommend).map(p => {
+
+                // 콘솔 로그 함수에도 로직 타입을 전달해줍니다.
+                logRecommendation(data.predictions, data.type);
+            }
+
+            function logRecommendation(predictions, logicType) {
+                if (!Array.isArray(predictions) || predictions.length === 0) {
+                    return;
+                }
+
+                const recommendationHtml = predictions.filter(p => p.recommend).map(p => {
+                    // ★★★ 핵심 수정: p.mae와 p.sub_type을 모두 전달합니다. ★★★
+                    let iconHtml = '';
+                    if (logicType === 'logic1' && p.mae && p.sub_type) {
+                        iconHtml = getIconForPattern(p.mae, p.sub_type);
+                    }
+
                     const circleClass = p.recommend === 'P' ? 'player' : 'banker';
                     const amountString = (p.amount || 0).toLocaleString();
-                    return `<span class="baccarat-circle ${circleClass}">${p.recommend}</span> ${amountString}`;
+
+                    // 아이콘 HTML을 메시지 앞에 추가합니다.
+                    return `${iconHtml}<span class="baccarat-circle ${circleClass}">${p.recommend}</span> ${amountString}`;
                 }).join(' ');
+
                 if (recommendationHtml) {
                     addConsoleMessage(`다음 추천은 ${recommendationHtml} 제시합니다.`, 'recommendation');
                 }
@@ -600,8 +667,8 @@
 
                     // ★★★ 여기에 토스트 호출 추가 ★★★
                     showToast('center-toast', `'${v}' 로직으로 변경되었습니다.`, {
-                        type: 'info',    // 정보 타입 (파란색)
-                        duration: 1500,  // 1.5초 동안 표시
+                        type: 'info', // 정보 타입 (파란색)
+                        duration: 1500, // 1.5초 동안 표시
                         onComplete: () => {
                             // 예시: 토스트가 사라진 후 콘솔에 로그를 남깁니다.
                             console.log(`'${v}' 로직으로 변경 완료.`);

@@ -16,18 +16,25 @@
                         {{ __('대시보드') }}
                     </x-nav-link>
 
-                    {{-- 관리자 전용 '회원 관리' 메뉴 --}}
                     @role('Admin')
-                    <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
-                        {{ __('회원 관리') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
+                            {{ __('회원 관리') }}
+                        </x-nav-link>
+                        
+                        {{-- ▼▼▼ 핵심 수정 부분 (데스크탑 메뉴에 추가) ▼▼▼ --}}
+                        <x-nav-link :href="route('admin.logic3.edit')" :active="request()->routeIs('admin.logic3.*')">
+                            {{ __('Logic 3 관리') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('admin.logic2.edit')" :active="request()->routeIs('admin.logic2.*')">
+                            {{ __('Logic 2 관리') }}
+                        </x-nav-link>
+                        {{-- ▲▲▲ 핵심 수정 부분 (데스크탑 메뉴에 추가) ▲▲▲ --}}
                     @endrole
 
-                    {{-- ★ 1. 데스크탑용 '조직 관리' 메뉴: <x-nav-link>를 사용합니다. ★ --}}
                     @hasanyrole('Level 3|Level 4|Level 5|Level 6|Level 7|Level 8|Level 9')
-                    <x-nav-link :href="route('system.users.index')" :active="request()->routeIs('system.users.*')">
-                        {{ __('조직 관리') }}
-                    </x-nav-link>
+                        <x-nav-link :href="route('system.users.index')" :active="request()->routeIs('system.users.*')">
+                            {{ __('조직 관리') }}
+                        </x-nav-link>
                     @endhasanyrole
                 </div>
             </div>
@@ -88,17 +95,15 @@
                 {{ __('회원 관리') }}
             </x-responsive-nav-link>
 
-            {{-- ★★★ 이 부분을 추가합니다! ★★★ --}}
-            <x-nav-link :href="route('admin.logic3.edit')" :active="request()->routeIs('admin.logic3.*')">
+            <x-responsive-nav-link :href="route('admin.logic3.edit')" :active="request()->routeIs('admin.logic3.*')">
                 {{ __('Logic 3 관리') }}
-            </x-nav-link>
-            <x-nav-link :href="route('admin.logic2.index')" :active="request()->routeIs('admin.logic2.*')">
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('admin.logic2.edit')" :active="request()->routeIs('admin.logic2.*')">
                 {{ __('Logic 2 관리') }}
-            </x-nav-link>
-            {{-- 여기까지 --}}
+            </x-responsive-nav-link>
             @endrole
 
-            {{-- ★ 2. 모바일용 '조직 관리' 메뉴: <x-responsive-nav-link>를 사용합니다. ★ --}}
             @hasanyrole('Level 3|Level 4|Level 5|Level 6|Level 7|Level 8|Level 9')
             <x-responsive-nav-link :href="route('system.users.index')" :active="request()->routeIs('system.users.*')">
                 {{ __('조직 관리') }}
