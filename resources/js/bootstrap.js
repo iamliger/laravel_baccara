@@ -1,4 +1,5 @@
 window._ = require('lodash');
+window.axios = require('axios');
 
 /**
  * We'll load the axios HTTP library which allows us to easily issue requests
@@ -6,23 +7,21 @@ window._ = require('lodash');
  * CSRF token as a header based on the value of the "XSRF" token cookie.
  */
 
-window.axios = require('axios');
 
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+window.axios.defaults.withCredentials = true;
 
-/**
- * Echo exposes an expressive API for subscribing to channels and listening
- * for events that are broadcast by Laravel. Echo and event broadcasting
- * allows your team to easily build robust real-time web applications.
- */
+const csrfToken = document.head.querySelector('meta[name="csrf-token"]');
 
-// import Echo from 'laravel-echo';
+if (csrfToken) {
+    window.axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken.content;
+} else {
+    console.error('CSRF token not found: https://laravel.com/docs/csrf#csrf-x-csrf-token');
+}
 
-// window.Pusher = require('pusher-js');
-
-// window.Echo = new Echo({
-//     broadcaster: 'pusher',
-//     key: process.env.MIX_PUSHER_APP_KEY,
-//     cluster: process.env.MIX_PUSHER_APP_CLUSTER,
-//     forceTLS: true
-// });
+// ★★★ 이 부분을 추가하거나, 이 내용으로 교체해주세요. ★★★
+axios.get('/sanctum/csrf-cookie').then(response => {
+    console.log('CSRF cookie set successfully.');
+}).catch(error => {
+    console.error('Could not get CSRF cookie.', error);
+});

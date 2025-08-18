@@ -135,6 +135,12 @@
                                 활성화</label><button type="button" role="switch" aria-checked="true"
                                 id="chkvirtualbet" class="setting-toggle"><span
                                     class="setting-toggle-knob"></span></button></div>
+                        <div class="setting-item">
+                            <label for="chk_ai_predict" class="setting-label">AI 예측 활성화 (실험적)</label>
+                            <button type="button" role="switch" aria-checked="false" id="chk_ai_predict" class="setting-toggle">
+                                <span class="setting-toggle-knob"></span>
+                            </button>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer"><button type="button"
@@ -159,6 +165,7 @@
 
             const initialData = JSON.parse(baccaraContainer.dataset.initial || '{}');
             let jokboHistory, moneyArrStep, consoleMessages, currentSettings;
+            let aiPredictionTriggered = false;
 
             const el = {
                 playerBtn: document.getElementById('player-btn'),
@@ -213,6 +220,74 @@
             // -----------------------------
             // Livewire 이벤트 수신
             // -----------------------------
+            async function triggerAiPrediction() {
+                // 1. AI 기능 활성화 및 족보 길이 조건
+                const pureJokbo = jokboHistory.replace(/T/g, '');
+                if (!currentSettings.chk_ai_predict || pureJokbo.length < 10) {
+                    return;
+                }
+
+                // 2. 최초 실행 시 알림 메시지
+                if (!aiPredictionTriggered) {
+                    addConsoleMessage('[AI 예측] 최소 데이터(10개)가 수집되어 로지스틱 회귀 분석을 시작합니다.', 'system');
+                    aiPredictionTriggered = true;
+                }
+
+                try {
+                    // 3. 서버로 족보를 보내고 예측 결과를 요청
+                    const response = await axios.post(
+                        '/api/ai-predict', 
+                        { jokbo: jokboHistory }
+                    );
+                    
+                    // 4. axios는 JSON 데이터를 response.data에 담아줌
+                    const result = response.data;
+                    console.log('ai prediction result:', result);
+
+                    // 5. 받은 예측 결과를 콘솔에 표시
+                    if (result.success) {
+                        const iconHtml = createAiPredictionIcon(result.recommend);                         
+                        const message = `[AI 예측] 다음 추천은 ${iconHtml} 입니다. (확률: ${result.confidence}%)`;
+                        addConsoleMessage(message, 'ai-prediction');
+                    } else {
+                        addConsoleMessage(`[AI 예측] 오류: ${result.message}`, 'error');
+                    }
+
+                } catch (error) {
+                    // 6. 서버 에러 발생 시 처리
+                    console.error('AI Prediction Error:', error);
+                    const errorMessage = error.response?.data?.message || '요청 중 오류가 발생했습니다.';
+                    addConsoleMessage(`[AI 예측] ${errorMessage}`, 'error');
+                }
+            }
+
+            function createAiPredictionIcon(recommend) {
+                if (recommend === 'P') {
+                    return '<span class="baccarat-circle player">P</span>';
+                } else if (recommend === 'B') {
+                    return '<span class="baccarat-circle banker">B</span>';
+                }
+                return `<span>${recommend}</span>`; // 예외 처리
+            }
+
+            /**
+             * ★★★ AI 예측 결과를 받아 아이콘이 포함된 메시지를 콘솔에 출력하는 함수 ★★★
+             * AiPredictionController.php의 API를 호출한 후, 그 결과(data)를 이 함수에 넘겨주면 됩니다.
+             * @param {object} data - API 응답 객체 (예: { recommend: 'B', confidence: 55.5 })
+             */
+            function showAiPredictionInConsole(data) {
+                if (!data || !data.recommend || !data.confidence) return;
+
+                const iconHtml = createAiPredictionIcon(data.recommend);
+                const confidence = data.confidence;
+                
+                // 아이콘이 포함된 최종 메시지 생성
+                const message = `[AI 예측] 다음 추천은 ${iconHtml} 입니다. (확률: ${confidence}%)`;
+                
+                // 새로운 'ai-prediction' 타입으로 콘솔 메시지 추가
+                addConsoleMessage(message, 'ai-prediction');
+            }
+
             function getIconForPattern(mae, subType) {
                 // ★★★ 이 부분에는 mae를 필터링하는 코드가 없어야 합니다. ★★★
                 // (이전 답변의 주석은 제 실수였으며, 현재 코드가 정확합니다.)
@@ -257,6 +332,7 @@
 
                 // 4. 변경된 족보 상태를 브라우저의 로컬 스토리지에 저장합니다.
                 saveState();
+                triggerAiPrediction();
             });
 
             // 'undo' 액션에 대한 이벤트 리스너 추가
@@ -276,6 +352,7 @@
 
                 // 4. 변경된 상태를 저장합니다.
                 saveState();
+                triggerAiPrediction();
             });
 
             // 'reset' 액션에 대한 이벤트 리스너 추가
@@ -576,8 +653,8 @@
             }
 
             function renderPrediction(data) {
-                console.log('renderPrediction', data);
-                
+                //console.log('renderPrediction', data);
+
                 // 예측 데이터가 없거나 비어있으면 헤더를 비웁니다.
                 if (!data || !data.predictions || data.predictions.length === 0) {
                     el.predictionHeader.innerHTML = '';
@@ -659,6 +736,7 @@
                 if (el.resetBtn) el.resetBtn.onclick = () => {
                     if (confirm('정말로 모든 기록을 초기화하시겠습니까?')) {
                         localStorage.removeItem(PREDICTION_STORAGE_KEY);
+                        aiPredictionTriggered = false;
                         Livewire.emit('resetRequest');
                     }
                 };
@@ -747,7 +825,8 @@
                     chkmoneyinfo: false,
                     chkconsole: true,
                     chkvirtualbet: true,
-                    chkcopylog: true
+                    chkcopylog: true,
+                    chk_ai_predict: false
                 };
                 try {
                     const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY));

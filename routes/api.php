@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\BacaraAnalyticsController;
+use App\Http\Controllers\Api\AiPredictionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,4 +22,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 
 Route::post('/analyze-baccarat', [BacaraAnalyticsController::class, 'analyze'])
-    ->middleware('auth:sanctum'); // 로그인한 사용자만 이 API를 호출할 수 있도록 보호
+    ->middleware('auth:sanctum');
+
+Route::post('/ai-predict', [AiPredictionController::class, 'predict'])
+    ->middleware('auth:sanctum');
