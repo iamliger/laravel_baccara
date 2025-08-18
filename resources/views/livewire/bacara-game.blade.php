@@ -16,7 +16,7 @@
     {{-- 메인 콘텐츠 영역 --}}
     <main class="baccara-main-content">
         {{-- 플레이어, 뱅커, 로직 선택, 취소 버튼이 있는 컨트롤 패널 --}}
-        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div wire:ignore class="flex flex-wrap justify-between items-center gap-2 mb-4">
             <div class="flex flex-wrap items-center gap-2">
                 <button id="player-btn"
                     class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm shadow">플레이어 <span
@@ -27,7 +27,7 @@
             </div>
             <div class="flex items-center gap-2">
                 <div id="logic-btn-group" role="radiogroup" class="logic-btn-group">
-                    <button type="button" role="radio" aria-checked="true" data-value="logic1"
+                    <button type="button" role="radio" aria-checked="false" data-value="logic1"
                         class="logic-btn">로직1</button>
                     <button type="button" role="radio" aria-checked="false" data-value="logic2"
                         class="logic-btn">로직2</button>
@@ -208,6 +208,7 @@
             const STORAGE_KEY = `baccara_state_{{ auth()->user()->name }}`;
             const CONSOLE_STORAGE_KEY = `baccara_console_{{ auth()->user()->name }}`;
             const SETTINGS_KEY = `baccara_settings_{{ auth()->user()->name }}`;
+            const PREDICTION_STORAGE_KEY = `baccara_prediction_{{ auth()->user()->name }}`;
 
             // -----------------------------
             // Livewire 이벤트 수신
@@ -575,6 +576,8 @@
             }
 
             function renderPrediction(data) {
+                console.log('renderPrediction', data);
+                
                 // 예측 데이터가 없거나 비어있으면 헤더를 비웁니다.
                 if (!data || !data.predictions || data.predictions.length === 0) {
                     el.predictionHeader.innerHTML = '';
@@ -606,7 +609,7 @@
 
                 el.predictionHeader.innerHTML = predictionHtml;
 
-                // 콘솔 로그 함수에도 로직 타입을 전달해줍니다.
+                localStorage.setItem(PREDICTION_STORAGE_KEY, JSON.stringify(data));
                 logRecommendation(data.predictions, data.type);
             }
 
@@ -651,10 +654,11 @@
                 };
                 if (el.undoBtn) el.undoBtn.onclick = () => {
                     addConsoleMessage('마지막 입력을 취소했습니다.', 'system');
-                    Livewire.emit('undoRequest');
+                    Livewire.emit('undoRequest', getSelectedLogic()); 
                 };
                 if (el.resetBtn) el.resetBtn.onclick = () => {
                     if (confirm('정말로 모든 기록을 초기화하시겠습니까?')) {
+                        localStorage.removeItem(PREDICTION_STORAGE_KEY);
                         Livewire.emit('resetRequest');
                     }
                 };
@@ -767,6 +771,16 @@
                     }
                 } catch (e) {
                     consoleMessages = [];
+                }
+
+                const savedPrediction = localStorage.getItem(PREDICTION_STORAGE_KEY);
+                if (savedPrediction) {
+                    try {
+                        renderPrediction(JSON.parse(savedPrediction));
+                    } catch (e) {
+                        // 데이터가 깨져있으면 삭제
+                        localStorage.removeItem(PREDICTION_STORAGE_KEY);
+                    }
                 }
 
                 el.consoleBox.innerHTML = '';

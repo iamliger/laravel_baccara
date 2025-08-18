@@ -12,18 +12,20 @@ use App\Models\Ticket4;
 use App\Models\Ticket5;
 use App\Models\Ticket6;
 
+
 class BacaraGame extends Component
 {
     public string $jokboHistory = '';
     public int $playerCount = 0;
     public int $bankerCount = 0;
     public int $totalCount = 0;
-    public array $moneyArrStep = [];
+    public array $moneyArrStep = [];    
 
-    protected $listeners = ['addResultRequest', 'undoRequest', 'resetRequest', 'setCoinInfoRequest'];
+    // ★★★ undoRequest가 이제 파라미터를 받으므로 리스너에서 제거합니다. ★★★
+    protected $listeners = ['addResultRequest', /*'undoRequest',*/ 'resetRequest', 'setCoinInfoRequest'];
 
     public function mount()
-    {
+    {       
         $this->loadGameFromDB();
     }
 
@@ -58,21 +60,19 @@ class BacaraGame extends Component
             ]
         ]);
         
-        // 2. 예측 결과는 별도의 'predictionUpdated' 이벤트로 보냅니다.
-        if (!empty($result['prediction'])) {
-            $this->emit('predictionUpdated', $result['prediction']);
-        }
+        // ★★★ 핵심 수정: 예측 결과가 비어있더라도, null 값을 담아 이벤트를 '반드시' 발생시킵니다.
+        $this->emit('predictionUpdated', $result['prediction'] ?? null);
     }
     
-    public function undoRequest()
+    public function undoRequest(string $selectedLogic, PredictionService $predictionService)
     {
         if (strlen($this->jokboHistory) > 0 && Auth::check()) {
+            // 1. 족보를 한 글자 줄입니다.
             $this->jokboHistory = substr($this->jokboHistory, 0, -1);
             $this->updateAndSaveJokbo();
             $this->updateCounts();
             
-            // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
-            // 'itemRemoved' 이벤트를 보내 클라이언트 UI를 업데이트합니다.
+            // 2. 클라이언트 UI 업데이트를 위해 이벤트를 보냅니다.
             $this->emit('itemRemoved', [
                 'counts' => [
                     'player' => $this->playerCount,
@@ -80,6 +80,19 @@ class BacaraGame extends Component
                     'total' => $this->totalCount,
                 ]
             ]);
+
+            // 3. ★★★ 짧아진 족보를 기준으로 예측을 다시 실행합니다. ★★★
+            $userDbState = BacaraDb::firstWhere('memberid', Auth::user()->name);
+            $result = $predictionService->processTurn($userDbState, $selectedLogic, false);
+
+            $this->applyUpdates($result['updates'], Auth::user()->name);
+            foreach ($result['updates']['BacaraDb'] ?? [] as $field => $value) {
+                $userDbState->$field = $value;
+            }
+            $userDbState->save();
+            
+            // ★★★ 핵심 수정: 예측 결과가 비어있더라도, null 값을 담아 이벤트를 '반드시' 발생시킵니다.
+            $this->emit('predictionUpdated', $result['prediction'] ?? null);
         }
     }
     

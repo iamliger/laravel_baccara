@@ -36,87 +36,343 @@ class PredictionService
             $updates = $logicResult['db_updates'] ?? [];
             $predictionResult = $logicResult['prediction'];
         } elseif ($selectedLogic === 'logic2') {
-            $logicResult = $this->processLogic2($userDbState);
+            $logicResult = $this->processLogic2($userDbState, $isVirtualBetting); // isVirtualBetting 전달
+            $updates = $logicResult['db_updates'] ?? [];
             $predictionResult = $logicResult['prediction'];
         } elseif ($selectedLogic === 'logic3') {
-            $logicResult = $this->processLogic3($userDbState);
+            $logicResult = $this->processLogic3($userDbState, $isVirtualBetting); // isVirtualBetting 전달
+            $updates = $logicResult['db_updates'] ?? [];
             $predictionResult = $logicResult['prediction'];
         } elseif ($selectedLogic === 'logic4') {
-            $logicResult = $this->processLogic4($userDbState);
+            $logicResult = $this->processLogic4($userDbState, $isVirtualBetting); // isVirtualBetting 전달
+            $updates = $logicResult['db_updates'] ?? [];
             $predictionResult = $logicResult['prediction'];
         }
 
         return ['updates' => $updates, 'prediction' => $predictionResult];
     }
     
-    // (로직 2, 3, 4 관련 메소드는 변경 없음)
     private function processLogic2(BacaraDb $userDbState): array
     {
-        return $this->processConfigBasedLogicPrefixTracking($userDbState, 'logic2');
-    }
-
-    private function processLogic3(BacaraDb $userDbState): array
-    {
-        return $this->processConfigBasedLogicPrefixTracking($userDbState, 'logic3');
-    }
-
-    private function processConfigBasedLogicPrefixTracking(BacaraDb $userDbState, string $logicType): array
-    {
         $jokbo = $userDbState->bcdata ?? '';
-        $slen = strlen($jokbo);
+        $updates = [];
+
+        $pb_jokbo_chars = str_split(str_replace('T', '', $jokbo));
+        if (empty($pb_jokbo_chars)) {
+            return ['prediction' => ['type' => 'logic2', 'predictions' => []], 'db_updates' => []];
+        }
+        $anchor_char = end($pb_jokbo_chars);
+
+        $patterns = [
+            'A' => ['name' => 'pattern1', 'sequence' => [1, 1, -1, -1, 1, 1, -1]],
+            'B' => ['name' => 'pattern2', 'sequence' => [-1, -1, 1, 1, -1, -1, 1]]
+        ];
+
+        $all_logic_states_before = json_decode($userDbState->logic_state, true) ?? [];
+        $logic2_states = $all_logic_states_before['logic2'] ?? [];
+        
+        $next_states = [];
         $allPredictions = [];
+        $moneySteps = json_decode($userDbState->coininfo, true) ?? [];
 
-        $config = BaccaraConfig::first();
-        $logic_config = $config->{$logicType.'_patterns'} ?? [];
-        $sequences = $logic_config['sequences'] ?? [];
+        foreach ($patterns as $key => $pattern_info) {
+            // ★★★ 각 패턴의 lose 카운터도 불러옵니다.
+            $current_state = $logic2_states[$key] ?? ['step' => 0, 'lose' => 0, 'last_prediction' => null];
+            
+            $updated_info = $this->calculateNextStateLogic2(
+                $current_state, $anchor_char, $pattern_info['sequence'], $jokbo
+            );
+            
+            // ★★★ 다음 상태에 lose 카운터도 저장합니다.
+            $next_states[$key] = [
+                'step' => $updated_info['step'],
+                'lose' => $updated_info['lose'],
+                'last_prediction' => $updated_info['next_prediction']
+            ];
+            
+            // ★★★ lose 카운터를 기준으로 amount와 step을 계산합니다.
+            $current_lose = $updated_info['lose'];
+            $amount = $moneySteps[$current_lose] ?? 1000;
 
-        if (empty($sequences) || $slen < 1) {
-            return ['prediction' => ['type' => $logicType, 'predictions' => []]];
+            $allPredictions[] = [
+                "sub_type" => $pattern_info['name'],
+                "recommend" => $updated_info['next_prediction'],
+                "step" => $current_lose + 1, // 단계는 lose + 1
+                "amount" => $amount,
+                "mae" => 0,
+            ];
         }
-        
-        foreach ($sequences as $index => $sequence) {
-            $patternLength = count($sequence);
-            for ($matchLength = 1; $matchLength < $patternLength; $matchLength++) {
-                if ($slen < $matchLength) continue;
-                $jokboEndPart = substr($jokbo, -$matchLength);
-                $patternStartPart = array_slice($sequence, 0, $matchLength);
-                $patternStartString = implode('', array_map(fn($val) => $val == 1 ? 'P' : 'B', $patternStartPart));
 
-                if ($jokboEndPart === $patternStartString) {
-                    $nextStepValue = $sequence[$matchLength];
-                    $recommendation = ($nextStepValue == 1) ? 'P' : 'B';
-
-                    $allPredictions[] = [
-                        'sub_type' => '패턴 '.($index + 1),
-                        'recommend' => $recommendation,
-                        'step' => $matchLength + 1,
-                        'amount' => 1000,
-                        'mae' => 0,
-                    ];
-                }
-            }
-        }
+        $all_logic_states_before['logic2'] = $next_states;
+        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
         
-        return ['prediction' => ['type' => $logicType, 'predictions' => $allPredictions]];
+        return [
+            'prediction' => ['type' => 'logic2', 'predictions' => $allPredictions],
+            'db_updates' => $updates
+        ];
     }
     
-    private function processLogic4(BacaraDb $userDbState): array
+    /**
+     * 로직 2의 다음 상태를 계산하는 헬퍼 함수 (새로운 코드 완벽 포팅)
+     */
+    private function calculateNextStateLogic2(array $current_state, string $anchor_char, array $sequence, string $jokbo): array
     {
-        $jokbo = $userDbState->bcdata ?? '';
-        $allPredictions = [];
-        $roadsForP = $this->scorer->getAllRoads($jokbo . 'P');
-        $roadsForB = $this->scorer->getAllRoads($jokbo . 'B');
-        $derivedRoads = ['big_eye' => '3매', 'small' => '4매', 'cockroach' => '5매'];
-        foreach ($derivedRoads as $key => $name) {
-            $lastColorForP = !empty($roadsForP[$key]) ? end($roadsForP[$key])['color'] : null;
-            $lastColorForB = !empty($roadsForB[$key]) ? end($roadsForB[$key])['color'] : null;
-            if ($lastColorForP === 'red' && $lastColorForB === 'blue') {
-                $allPredictions[] = ['sub_type' => $name, 'recommend' => 'P', 'step' => 1, 'amount' => 1000, 'mae' => 0];
-            } elseif ($lastColorForP === 'blue' && $lastColorForB === 'red') {
-                $allPredictions[] = ['sub_type' => $name, 'recommend' => 'B', 'step' => 1, 'amount' => 1000, 'mae' => 0];
+        $lastPos = substr($jokbo, -1);
+        $current_step = $current_state['step'] ?? 0;
+        $current_lose = $current_state['lose'] ?? 0; // ★★★ 현재 lose 값을 불러옵니다.
+        $last_prediction = $current_state['last_prediction'] ?? null;
+        
+        $next_step = $current_step;
+        $next_lose = $current_lose; // ★★★ 다음 lose 값을 초기화합니다.
+
+        if ($last_prediction !== null && $lastPos !== 'T') {
+            if ($last_prediction === $lastPos) {
+                // 승리: step과 lose를 0으로 리셋
+                $next_step = 0;
+                $next_lose = 0;
+            } else {
+                // 패배: step을 1 증가, lose도 1 증가
+                $next_step = $current_step + 1;
+                $next_lose = $current_lose + 1;
             }
         }
-        return ['prediction' => ['type' => 'logic4', 'predictions' => $allPredictions]];
+        
+        if ($next_step >= count($sequence)) {
+            $next_step = 0;
+        }
+    
+        $next_prediction_value = $sequence[$next_step];
+        $next_prediction_char = ($next_prediction_value === 1) ? $anchor_char : $this->reverse($anchor_char);
+    
+        // ★★★ 반환값에 'lose'를 추가합니다. ★★★
+        return [
+            'step' => $next_step,
+            'lose' => $next_lose, 
+            'next_prediction' => $next_prediction_char
+        ];
+    }
+
+    /**
+     * 로직 3: 저장된 10개 패턴 중, 확률(과거 승률)이 가장 높은 것 하나만 추천
+     */
+    private function processLogic3(BacaraDb $userDbState, bool $should_update_stats): array
+    {
+        if (config('app.baccara_debug')) Log::debug("--- 로직 3 검사 시작 ---");
+
+        $jokbo = $userDbState->bcdata ?? '';
+        $updates = [];
+        
+        $pb_jokbo_chars = str_split(str_replace('T', '', $jokbo));
+        if (empty($pb_jokbo_chars)) {
+            if (config('app.baccara_debug')) Log::debug(" [logic3] 족보가 비어있어 예측을 생성하지 않습니다.");
+            return ['prediction' => ['type' => 'logic3', 'predictions' => []], 'db_updates' => []];
+        }
+        $anchor_char = end($pb_jokbo_chars);
+        $lastPos = substr($jokbo, -1);
+
+        $config = BaccaraConfig::first();
+        $logic_config = $config->logic3_patterns ?? [];
+        $sequences = $logic_config['sequences'] ?? [];
+        if (empty($sequences)) {
+            if (config('app.baccara_debug')) Log::debug(" [logic3] DB에 설정된 패턴이 없습니다.");
+            return ['prediction' => ['type' => 'logic3', 'predictions' => []], 'db_updates' => []];
+        }
+        $pattern_count = count($sequences);
+
+        $all_logic_states_before = json_decode($userDbState->logic_state, true) ?? [];
+        $logic3_states = $all_logic_states_before['logic3'] ?? [];
+        
+        // 1. '이전' 상태를 정확히 불러옵니다.
+        $last_final_prediction = $logic3_states['final_prediction'] ?? null;
+        $current_lose = $logic3_states['lose'] ?? 0;
+        
+        if (config('app.baccara_debug')) Log::debug(" [logic3] [1. 시작 전 상태]: lose={$current_lose}, last_prediction={$last_final_prediction}");
+        
+        // 2. 종합 예측의 승/패를 판단하고, 다음 lose 카운트를 결정합니다.
+        $next_lose = $current_lose;
+        if ($last_final_prediction !== null && $lastPos !== 'T') {
+            if ($last_final_prediction === $lastPos) {
+                // 승리: lose 카운트를 0으로 리셋
+                $next_lose = 0;
+                if (config('app.baccara_debug')) Log::debug(" [logic3] [승패 판정]: 승리! lose 카운트를 0으로 리셋합니다.");
+            } else {
+                // 패배: lose 카운트를 1 증가
+                $next_lose = $current_lose + 1;
+                if (config('app.baccara_debug')) Log::debug(" [logic3] [승패 판정]: 패배! lose 카운트가 " . ($next_lose) . "(으)로 증가합니다.");
+            }
+        }
+
+        // 3. 모든 개별 패턴의 다음 예측과 다음 상태를 계산합니다.
+        $all_next_predictions = [];
+        $next_individual_states = []; 
+
+        foreach ($sequences as $index => $sequence) {
+            $pattern_key = "pattern_{$index}";
+            $current_state = $logic3_states[$pattern_key] ?? ['step' => 0, 'last_prediction' => null];
+            
+            // --- 헬퍼 함수 로직을 여기에 직접 구현 ---
+            $current_step = $current_state['step'] ?? 0;
+            $last_prediction = $current_state['last_prediction'] ?? null;
+            $next_step = $current_step;
+
+            if ($last_prediction !== null && $lastPos !== 'T') {
+                if ($last_prediction === $lastPos) $next_step = 0; // 승리 시 step 리셋
+                else $next_step = $current_step + 1; // 패배 시 step 증가
+            }
+            if ($next_step >= count($sequence)) $next_step = 0;
+        
+            $next_prediction_value = $sequence[$next_step];
+            $next_prediction_char = ($next_prediction_value == 1) ? $anchor_char : $this->reverse($anchor_char);
+            // --- 로직 구현 끝 ---
+
+            $all_next_predictions[] = $next_prediction_char;
+            $next_individual_states[$pattern_key] = [
+                'step' => $next_step,
+                'last_prediction' => $next_prediction_char
+            ];
+        }
+        if (config('app.baccara_debug')) Log::debug(" [logic3] [개별 예측 목록]: " . implode(', ', $all_next_predictions));
+        
+        $predictions = [];
+        $next_final_prediction = null;
+
+        if (!empty($all_next_predictions)) {
+            $counts = array_count_values(array_filter($all_next_predictions));
+            if (!empty($counts)) {
+                arsort($counts);
+                $next_final_prediction = key($counts);
+                $prediction_percentage = ($counts[$next_final_prediction] / $pattern_count) * 100;
+                
+                // 4. 확률 100% 방지 로직
+                if ($prediction_percentage === 100.0) {
+                    $prediction_percentage = 99.9;
+                }
+
+                if (config('app.baccara_debug')) Log::debug(" [logic3] [다수결 결과]: {$next_final_prediction} ( {$counts[$next_final_prediction]} / {$pattern_count}표 )");
+                
+                // 5. 단계별 금액 적용
+                $moneySteps = json_decode($userDbState->coininfo, true) ?? [];
+                $amount = $moneySteps[$next_lose] ?? 1000; // '다음' lose 카운트에 맞는 금액
+
+                $predictions[] = [
+                    "sub_type" => sprintf("종합 예측 (%d/%d, %.1f%%)", $counts[$next_final_prediction], $pattern_count, $prediction_percentage),
+                    "recommend" => $next_final_prediction,
+                    "step" => $next_lose + 1, // '다음' 단계는 lose + 1
+                    "amount" => $amount,
+                    "mae" => 0,
+                ];
+            }
+        }
+        
+        // 6. DB에 저장할 최종 상태를 준비합니다.
+        $next_states_to_save = $next_individual_states;
+        $next_states_to_save['final_prediction'] = $next_final_prediction;
+        $next_states_to_save['lose'] = $next_lose; // 업데이트된 lose 카운트 저장
+        $all_logic_states_before['logic3'] = $next_states_to_save;
+        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
+        
+        return [
+            'prediction' => ['type' => 'logic3', 'predictions' => $predictions],
+            'db_updates' => $updates
+        ];
+    }  
+    
+    private function processLogic4(BacaraDb $userDbState, bool $should_update_stats): array
+    {
+        if (config('app.baccara_debug')) Log::debug("--- 로직 4 검사 시작 ---");
+
+        $jokbo = $userDbState->bcdata ?? '';
+        $updates = [];
+
+        $pb_string = str_replace('T', '', $jokbo);
+        $pb_len = strlen($pb_string);
+        $lastPos = substr($jokbo, -1);
+
+        if ($pb_len < 1) {
+            if (config('app.baccara_debug')) Log::debug(" [logic4] 순수 족보가 비어있어 예측을 생성하지 않습니다.");
+            return ['prediction' => ['type' => 'logic4', 'predictions' => []], 'db_updates' => []];
+        }
+
+        // 1. DB에서 로직 4의 '이전 상태'를 불러옵니다.
+        $all_logic_states_before = json_decode($userDbState->logic_state, true) ?? [];
+        $logic4_states = $all_logic_states_before['logic4'] ?? [];
+        
+        // ★★★ 2. '매'별로 이전 예측과 lose 카운터를 개별적으로 가져옵니다. ★★★
+        $last_pred_3mae = $logic4_states['pred_3mae'] ?? null;
+        $lose_3mae = $logic4_states['lose_3mae'] ?? 0;
+
+        $last_pred_4mae = $logic4_states['pred_4mae'] ?? null;
+        $lose_4mae = $logic4_states['lose_4mae'] ?? 0;
+        
+        $last_pred_5mae = $logic4_states['pred_5mae'] ?? null;
+        $lose_5mae = $logic4_states['lose_5mae'] ?? 0;
+
+        if (config('app.baccara_debug')) {
+            Log::debug(" [logic4] [이전 상태]: 3매(lose={$lose_3mae}, pred={$last_pred_3mae}), 4매(lose={$lose_4mae}, pred={$last_pred_4mae}), 5매(lose={$lose_5mae}, pred={$last_pred_5mae})");
+        }
+        
+        // ★★★ 3. '매'별로 승/패를 독립적으로 판단하고 다음 lose 카운터를 계산합니다. ★★★
+        $next_lose_3mae = $lose_3mae;
+        if ($last_pred_3mae && $lastPos !== 'T') {
+            $next_lose_3mae = ($last_pred_3mae === $lastPos) ? 0 : $lose_3mae + 1;
+        }
+
+        $next_lose_4mae = $lose_4mae;
+        if ($last_pred_4mae && $lastPos !== 'T') {
+            $next_lose_4mae = ($last_pred_4mae === $lastPos) ? 0 : $lose_4mae + 1;
+        }
+
+        $next_lose_5mae = $lose_5mae;
+        if ($last_pred_5mae && $lastPos !== 'T') {
+            $next_lose_5mae = ($last_pred_5mae === $lastPos) ? 0 : $lose_5mae + 1;
+        }
+        
+        if (config('app.baccara_debug')) {
+             Log::debug(" [logic4] [다음 상태]: 3매(lose={$next_lose_3mae}), 4매(lose={$next_lose_4mae}), 5매(lose={$next_lose_5mae})");
+        }
+
+        // 4. '매'별로 새로운 예측을 생성합니다.
+        $allPredictions = [];
+        $next_states = [];
+        $moneySteps = json_decode($userDbState->coininfo, true) ?? [];
+
+        // 3매 예측
+        if ($pb_len >= 2) {
+            $pred_3mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 2]) ? 'B' : 'P';
+            $next_states['pred_3mae'] = $pred_3mae;
+            $amount_3mae = $moneySteps[$next_lose_3mae] ?? 1000;
+            $allPredictions[] = [ "sub_type" => "3매", "recommend" => $pred_3mae, "step" => $next_lose_3mae + 1, "amount" => $amount_3mae, "mae" => 3 ];
+        }
+        
+        // 4매 예측
+        if ($pb_len >= 3) {
+            $pred_4mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 3]) ? 'B' : 'P';
+            $next_states['pred_4mae'] = $pred_4mae;
+            $amount_4mae = $moneySteps[$next_lose_4mae] ?? 1000;
+            $allPredictions[] = [ "sub_type" => "4매", "recommend" => $pred_4mae, "step" => $next_lose_4mae + 1, "amount" => $amount_4mae, "mae" => 4 ];
+        }
+
+        // 5매 예측
+        if ($pb_len >= 4) {
+            $pred_5mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 4]) ? 'B' : 'P';
+            $next_states['pred_5mae'] = $pred_5mae;
+            $amount_5mae = $moneySteps[$next_lose_5mae] ?? 1000;
+            $allPredictions[] = [ "sub_type" => "5매", "recommend" => $pred_5mae, "step" => $next_lose_5mae + 1, "amount" => $amount_5mae, "mae" => 5 ];
+        }
+        if (config('app.baccara_debug')) Log::debug(" [logic4] [최종 예측 결과]: " . json_encode($allPredictions));
+
+        // ★★★ 5. '매'별로 계산된 모든 상태를 DB에 저장할 준비를 합니다. ★★★
+        $next_states['lose_3mae'] = $next_lose_3mae;
+        $next_states['lose_4mae'] = $next_lose_4mae;
+        $next_states['lose_5mae'] = $next_lose_5mae;
+        
+        $all_logic_states_before['logic4'] = $next_states;
+        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
+        
+        return [
+            'prediction' => ['type' => 'logic4', 'predictions' => $allPredictions],
+            'db_updates' => $updates
+        ];
     }
 
     private function processLogic1(BacaraDb $userDbState): array
