@@ -1,28 +1,19 @@
 <aside class="sidebar">
-    <a href="#" class="sidebar-brand">
+    <a href="/" class="sidebar-brand">
         <i class="ti ti-brand-bootstrap"></i>
     </a>
     <nav class="sidebar-nav">
-        <a href="#" class="sidebar-link active">
-            <i class="ti ti-layout-dashboard"></i>
-        </a>
-        <a href="#" class="sidebar-link">
-            <i class="ti ti-home"></i>
-        </a>
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('mypage.index') }}" id="mypage-link" class="sidebar-link">
             <i class="ti ti-users"></i>
         </a>
         <a href="#" id="open-settings-modal-btn" class="sidebar-link">
             <i class="ti ti-settings"></i>
         </a>
-        <a href="#" class="sidebar-link">
-            <i class="ti ti-history"></i>
-        </a>
     </nav>
     <div class="sidebar-footer">
-        <a href="#" class="sidebar-link">
-            <i class="ti ti-sun"></i>
-        </a>
+        <button type="button" id="dark-mode-toggle" class="sidebar-link">
+            <i class="ti ti-sun"></i> {{-- 아이콘은 JS가 제어 --}}
+        </button>
         <a href="#" class="sidebar-link" onclick="event.preventDefault(); document.getElementById('logout-form-sidebar').submit();">
             <i class="ti ti-logout"></i>
         </a>

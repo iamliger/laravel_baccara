@@ -10,8 +10,16 @@
 {{-- Livewire 컴포넌트의 최상위 루트 요소입니다. --}}
 <div class="baccara-container" data-initial="{{ $initialData }}">
 
-    {{-- 예측 결과가 표시될 헤더 영역 --}}
-    <header id="prediction-header" class="prediction-header"></header>
+    {{-- ▼▼▼ 1. 새로운 헤더 추가 ▼▼▼ --}}
+    <header class="game-header">
+        {{-- 햄버거 버튼 (모바일 화면에서만 보임) --}}
+        <button id="menu-toggle" class="menu-toggle-btn">
+            <i class="ti ti-menu-2 text-xl"></i>
+        </button>
+        {{-- 기존 예측 헤더 --}}
+        <div id="prediction-header" class="prediction-header"></div>
+    </header>
+    {{-- ▲▲▲ 1. 새로운 헤더 추가 ▲▲▲ --}}
 
     {{-- 메인 콘텐츠 영역 --}}
     <main class="baccara-main-content">
@@ -64,7 +72,7 @@
 
         {{-- ▼▼▼ 3. wire:ignore 추가 ▼▼▼ --}}
         <div wire:ignore id="interactive-area" class="relative console-box-container">
-            <button id="copy-log-btn" type="button">로그 복사</button>
+            
             <div id="console-wrapper" class="toggle-view">
                 <div class="console-box" id="console"></div>
             </div>
@@ -78,13 +86,35 @@
 
         {{-- 리셋, 로그아웃 버튼 영역 --}}
         <div class="flex flex-wrap justify-between items-center gap-2 mt-4">
-            <button id="reset-btn"
-                class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm shadow">리셋</button>
+            <div class="flex items-center gap-2">
+                <button id="reset-btn"
+                    class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm shadow">리셋</button>
+                
+                {{-- ★★★ '로그 복사' 버튼을 여기에 추가합니다. (기본적으로 숨김) ★★★ --}}
+                <button id="copy-log-btn"
+                    class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm shadow hidden">로그 복사</button>
+            </div>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <a href="{{ route('logout') }}" onclick="event.preventDefault(); this.closest('form').submit();"
                     class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm shadow inline-block">로그아웃</a>
             </form>
+        </div>
+
+        {{-- ▼▼▼ 1. 마이페이지 모달 HTML 추가 ▼▼▼ --}}
+        <div id="mypage-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <div class="modal-header">
+                    <h3 class="modal-title">마이페이지</h3>
+                    <button type="button" class="modal-close-btn" data-modal-id="mypage-modal"><i class="ti ti-x text-xl"></i></button>
+                </div>
+                <div id="mypage-modal-body" class="modal-body">
+                    {{-- JavaScript가 이곳에 서버 콘텐츠를 채워넣을 것입니다. --}}
+                    <div class="flex items-center justify-center h-32">
+                        <i class="ti ti-loader animate-spin text-3xl text-gray-500"></i>
+                    </div>
+                </div>
+            </div>
         </div>
 
         {{-- 금액 설정 모달 (HTML 구조는 그대로 유지) --}}
@@ -136,11 +166,18 @@
                                 id="chkvirtualbet" class="setting-toggle"><span
                                     class="setting-toggle-knob"></span></button></div>
                         <div class="setting-item">
+                            <label for="chkcopylog" class="setting-label">로그 복사 기능</label>
+                            <button type="button" role="switch" aria-checked="false" id="chkcopylog" class="setting-toggle">
+                                <span class="setting-toggle-knob"></span>
+                            </button>
+                        </div>                        
+                        <div class="setting-item">
                             <label for="chk_ai_predict" class="setting-label">AI 예측 활성화 (실험적)</label>
                             <button type="button" role="switch" aria-checked="false" id="chk_ai_predict" class="setting-toggle">
                                 <span class="setting-toggle-knob"></span>
                             </button>
                         </div>
+
                     </form>
                 </div>
                 <div class="modal-footer"><button type="button"
@@ -166,6 +203,8 @@
             const initialData = JSON.parse(baccaraContainer.dataset.initial || '{}');
             let jokboHistory, moneyArrStep, consoleMessages, currentSettings;
             let aiPredictionTriggered = false;
+            let isGameInProgress = false;
+            const $wire = @this;
 
             const el = {
                 playerBtn: document.getElementById('player-btn'),
@@ -210,6 +249,11 @@
                 moneyModal: document.getElementById('moneystepinfo-modal'),
                 setMoneyBtn: document.getElementById('set-money-btn'),
                 moneyInput: document.getElementById('money'),
+                menuToggle: document.getElementById('menu-toggle'),
+                sidebar: document.querySelector('.sidebar'), // CSS 선택자로 찾기
+                sidebarOverlay: document.getElementById('sidebar-overlay'),
+                darkModeToggle: document.getElementById('dark-mode-toggle'), // ★★★ 다크모드 버튼 참조
+                mypageLink: document.getElementById('mypage-link') // ★★★ 마이페이지 링크 참조
             };
 
             const STORAGE_KEY = `baccara_state_{{ auth()->user()->name }}`;
@@ -339,8 +383,6 @@
             Livewire.on('itemRemoved', (data) => {
                 // 1. 족보 히스토리에서 마지막 글자를 제거합니다.
                 jokboHistory = jokboHistory.slice(0, -1);
-
-                // 2. 단축된 족보를 기반으로 모든 로드맵을 다시 그립니다.
                 redrawAllFromJokbo();
 
                 // 3. 서버에서 받은 최신 카운트로 화면을 업데이트합니다.
@@ -485,13 +527,26 @@
                 saveConsole();
             }
 
-            function applySettings() {
-                if (el.interactiveArea) el.interactiveArea.style.display = currentSettings.chkconsole ? '' : 'none';
-                if (el.copyLogBtn) el.copyLogBtn.style.display = currentSettings.chkcopylog ? '' : 'none';
+            function applySettings(settings) {
+                if (el.interactiveArea) el.interactiveArea.style.display = settings.chkconsole ? '' : 'none';
+                
+                if (el.copyLogBtn) {
+                    el.copyLogBtn.classList.toggle('hidden', !settings.chkcopylog);
+                }
+
                 el.settingsToggles.forEach(toggle => {
                     const key = toggle.id;
                     const isChecked = currentSettings[key] || false;
                     toggle.setAttribute('aria-checked', isChecked);
+
+                    // Tailwind CSS 클래스 토글로 시각적 상태 변경
+                    const knob = toggle.querySelector('.setting-toggle-knob');
+                    toggle.classList.toggle('bg-indigo-600', isChecked);
+                    toggle.classList.toggle('bg-gray-700', !isChecked);
+                    if (knob) {
+                        knob.classList.toggle('translate-x-5', isChecked);
+                        knob.classList.toggle('translate-x-0', !isChecked);
+                    }
                 });
             }
 
@@ -720,24 +775,83 @@
                 el.totalCountSpan.textContent = jokboHistory.length;
             }
 
+            // ▼▼▼ 3. 사이드바를 제어할 새로운 함수 추가 ▼▼▼
+            function toggleSidebar() {
+                if (!el.sidebar || !el.sidebarOverlay) return;
+
+                const isOpen = el.sidebar.classList.contains('is-open');
+                
+                // 클래스를 토글하여 CSS 애니메이션을 트리거
+                el.sidebar.classList.toggle('is-open', !isOpen);
+                el.sidebarOverlay.classList.toggle('hidden', isOpen);
+                
+                // 사이드바가 열렸을 때 배경 스크롤 방지 (선택사항)
+                document.body.classList.toggle('overflow-hidden', !isOpen);
+            }
+
+            function toggleDarkMode() {
+                const isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                updateThemeIcon(isDark);
+            }
+
+            /**
+             * 현재 테마에 맞게 아이콘을 업데이트하는 함수
+             */
+            function updateThemeIcon(isDark) {
+                if (!el.darkModeToggle) return;
+                const icon = el.darkModeToggle.querySelector('i');
+                if (icon) {
+                    icon.className = isDark ? 'ti ti-sun' : 'ti ti-moon';
+                }
+            }
+
+            /**
+             * 마이페이지 모달을 열고 서버에서 콘텐츠를 불러오는 함수
+             */
+            async function openMypageModal() {
+                const modalBody = document.getElementById('mypage-modal-body');
+                if (!modalBody) return;
+                
+                openModal('mypage-modal');
+                modalBody.innerHTML = `<div class="flex items-center justify-center h-32"><i class="ti ti-loader animate-spin text-3xl text-gray-500"></i></div>`;
+                
+                try {
+                    // axios를 사용하여 서버에 AJAX 요청
+                    const response = await axios.get("{{ route('mypage.index') }}", {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    modalBody.innerHTML = response.data;
+                } catch (error) {
+                    console.error("Mypage loading failed:", error);
+                    modalBody.innerHTML = `<p class="text-red-400">콘텐츠를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.</p>`;
+                }
+            }
+
             function bindEvents() {
-                if (el.playerBtn) el.playerBtn.onclick = () => {
+                if (el.playerBtn) el.playerBtn.onclick = () => {                    
                     addConsoleMessage('플레이어를 선택했습니다.', 'player');
-                    Livewire.emit('addResultRequest', 'P', getSelectedLogic(), currentSettings.chkvirtualbet);
+                    $wire.call('addResultRequest', 'P', getSelectedLogic(), currentSettings.chkvirtualbet);
+                    isGameInProgress = true;
                 };
                 if (el.bankerBtn) el.bankerBtn.onclick = () => {
                     addConsoleMessage('뱅커를 선택했습니다.', 'banker');
-                    Livewire.emit('addResultRequest', 'B', getSelectedLogic(), currentSettings.chkvirtualbet);
+                    $wire.call('addResultRequest', 'B', getSelectedLogic(), currentSettings.chkvirtualbet);
+                    isGameInProgress = true;
                 };
                 if (el.undoBtn) el.undoBtn.onclick = () => {
                     addConsoleMessage('마지막 입력을 취소했습니다.', 'system');
-                    Livewire.emit('undoRequest', getSelectedLogic()); 
+                    $wire.call('undoRequest', getSelectedLogic()); 
                 };
                 if (el.resetBtn) el.resetBtn.onclick = () => {
                     if (confirm('정말로 모든 기록을 초기화하시겠습니까?')) {
+                        saveSettings();
+                        console.log('리셋 시 환경설정이 저장되었습니다:', currentSettings);
+
                         localStorage.removeItem(PREDICTION_STORAGE_KEY);
                         aiPredictionTriggered = false;
-                        Livewire.emit('resetRequest');
+                        isGameInProgress = false;
+                        $wire.call('resetRequest');
                     }
                 };
                 if (el.logicBtnGroup) el.logicBtnGroup.onclick = (e) => {
@@ -779,37 +893,69 @@
                         openModal('setting-box-modal');
                     }
                 };
+                
                 el.settingsCloseBtns.forEach(btn => btn.onclick = () => closeModal(btn.dataset.modalId));
                 el.settingsToggles.forEach(toggle => {
                     toggle.onclick = () => {
                         const key = toggle.id;
-                        const isChecked = toggle.getAttribute('aria-checked') === 'true';
-                        currentSettings[key] = !isChecked;
-                        applySettings();
+                        //const isChecked = toggle.getAttribute('aria-checked') === 'true';
+                        //currentSettings[key] = !isChecked;
+                        currentSettings[key] = !currentSettings[key];
+                        applySettings(currentSettings);
                         saveSettings();
                     };
                 });
                 if (el.setMoneyBtn) el.setMoneyBtn.onclick = () => {
                     const startAmount = parseInt(el.moneyInput.value, 10);
                     if (startAmount && startAmount > 0) {
-                        Livewire.emit('setCoinInfoRequest', startAmount);
+                        $wire.call('setCoinInfoRequest', startAmount);
                     } else {
                         alert('올바른 시작 금액을 입력하세요.');
                         el.moneyInput.focus();
                     }
                 };
                 if (el.copyLogBtn) el.copyLogBtn.onclick = () => {
+                    // 콘솔 메시지 배열에서 텍스트만 추출하여 줄바꿈으로 합칩니다.
                     const logText = consoleMessages.map(msg => {
                         const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = msg.html;
+                        tempDiv.innerHTML = msg.html; // HTML 태그를 제거하기 위해 임시 div 사용
                         return tempDiv.textContent || tempDiv.innerText || '';
                     }).join('\n');
+                    
+                    // 클립보드에 복사
                     navigator.clipboard.writeText(logText).then(() => {
-                        alert('콘솔 로그가 클립보드에 복사되었습니다.');
+                        showToast('center-toast', '콘솔 로그가 클립보드에 복사되었습니다.', { type: 'success' });
                     }, () => {
-                        alert('로그 복사에 실패했습니다.');
+                        showToast('center-toast', '로그 복사에 실패했습니다.', { type: 'error' });
                     });
                 };
+                if (el.menuToggle) {
+                    el.menuToggle.onclick = toggleSidebar;
+                }
+                if (el.sidebarOverlay) {
+                    el.sidebarOverlay.onclick = toggleSidebar;
+                }
+
+                // ★★★ 다크모드/마이페이지 이벤트 바인딩 추가 ★★★
+                if (el.darkModeToggle) {
+                    el.darkModeToggle.onclick = toggleDarkMode;
+                }
+                if (el.mypageLink) {
+                    el.mypageLink.onclick = (e) => {
+                        e.preventDefault(); // 기본 링크 이동 방지
+                        openMypageModal();
+                    };
+                }
+
+                window.addEventListener('beforeunload', function (event) {
+                    // 게임이 진행 중일 때만 경고 메시지를 활성화합니다.
+                    if (isGameInProgress) {
+                        // 표준에 따라 event.preventDefault()를 호출합니다.
+                        event.preventDefault();
+                        // Chrome에서는 returnValue 설정이 필요합니다.
+                        event.returnValue = '새로고침 또는 다른 페이지로 이동시 데이터가 손실 될수 있습니다.';
+                    }
+                });
             }
 
             function init() {
@@ -877,11 +1023,17 @@
 
                 redrawAllFromJokbo();
                 updateCounts();
-                applySettings();
+                applySettings(currentSettings);
 
                 if (!moneyArrStep || moneyArrStep.length === 0) {
                     openModal('moneystepinfo-modal');
                 }
+
+                // ★★★ 페이지 로드 시 테마 복원 ★★★
+                const savedTheme = localStorage.getItem('theme') || 'dark'; // 기본값을 다크로 설정
+                const isDark = savedTheme === 'dark';
+                document.documentElement.classList.toggle('dark', isDark);
+                updateThemeIcon(isDark);               
 
                 bindEvents();
             }

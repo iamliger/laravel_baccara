@@ -85,11 +85,11 @@ class BacaraGame extends Component
             $userDbState = BacaraDb::firstWhere('memberid', Auth::user()->name);
             $result = $predictionService->processTurn($userDbState, $selectedLogic, false);
 
-            $this->applyUpdates($result['updates'], Auth::user()->name);
+            /*$this->applyUpdates($result['updates'], Auth::user()->name);
             foreach ($result['updates']['BacaraDb'] ?? [] as $field => $value) {
                 $userDbState->$field = $value;
             }
-            $userDbState->save();
+            $userDbState->save();*/
             
             // ★★★ 핵심 수정: 예측 결과가 비어있더라도, null 값을 담아 이벤트를 '반드시' 발생시킵니다.
             $this->emit('predictionUpdated', $result['prediction'] ?? null);

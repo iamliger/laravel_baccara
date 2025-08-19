@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Admin\Logic3PatternController;
 use App\Http\Controllers\Admin\Logic2PatternController;
 use App\Http\Controllers\BacaraController;
+use App\Http\Controllers\MypageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,6 +27,7 @@ Route::middleware('auth')->group(function () {
     // HomeController가 사용자의 레벨을 보고 알아서 올바른 페이지로 보내거나, 직접 뷰를 보여줍니다.
     Route::get('/', [HomeController::class, 'index'])->middleware('check.approval')->name('home');
     Route::get('/dashboard', [HomeController::class, 'index'])->middleware('check.approval')->name('dashboard');
+    Route::get('/mypage', [MypageController::class, 'index'])->name('mypage.index');
 
     // 1-2. Level 3~9 사용자들이 최종적으로 보게 될 페이지입니다.
     Route::get('/system', SystemDashboardController::class)->middleware('check.approval')->name('system.dashboard');

@@ -14,21 +14,30 @@
         
         @if (Route::is('bacara.create'))
 
-            {{-- 바카라 게임 전용 레이아웃 --}}
+            {{-- ▼▼▼ 핵심 수정 부분 ▼▼▼ --}}
             <div class="main-layout">
+                {{-- 1. 사이드바를 메인 레이아웃 바로 아래에 둡니다. --}}
                 @role('Level 2')
                     @include('layouts.sidebar')
                 @endrole
-                <div class="main-content-area">
+
+                {{-- 2. 메인 콘텐츠 영역을 감싸는 div를 추가합니다. --}}
+                <div class="content-wrapper">
+                    
+                    {{-- 3. 사이드바 오버레이를 추가합니다. (모바일용) --}}
+                    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
+                    
+                    {{-- 4. 실제 콘텐츠가 표시될 메인 영역입니다. --}}
                     <main>
                         {{ $slot }}
                     </main>
                 </div>
             </div>
+            {{-- ▲▲▲ 핵심 수정 부분 ▲▲▲ --}}
 
         @else
 
-            {{-- 그 외 모든 표준 페이지 레이아웃 --}}
+            {{-- 그 외 모든 표준 페이지 레이아웃 (변경 없음) --}}
             <div class="min-h-screen">
                 @include('layouts.navigation')
                 @if (isset($header))
