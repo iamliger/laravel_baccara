@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\BacaraAnalyticsController;
 use App\Http\Controllers\Api\AiPredictionController;
+use App\Http\Controllers\Api\ChartController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,3 +27,5 @@ Route::post('/analyze-baccarat', [BacaraAnalyticsController::class, 'analyze'])
 
 Route::post('/ai-predict', [AiPredictionController::class, 'predict'])
     ->middleware('auth:sanctum');
+
+    Route::get('/virtual-stats', [ChartController::class, 'getVirtualStats'])->middleware('auth:sanctum');

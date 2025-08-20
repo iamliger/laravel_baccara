@@ -19,7 +19,45 @@ class BacaraGame extends Component
     public int $playerCount = 0;
     public int $bankerCount = 0;
     public int $totalCount = 0;
-    public array $moneyArrStep = [];    
+    public array $moneyArrStep = [];
+    
+    protected $fillable = [
+        'memberid',
+        'dayinfo',
+        'bcdata',
+        'basetable',
+        'pattern_3',
+        'pattern_4',
+        'pattern_5',
+        'pattern_6',
+        'ptn',
+        'ptnhistory',
+        'baseresult',
+        'coininfo',
+        'chartResult',
+        'pattern_stats',
+        'logic_state',
+        'logic3_patterns',
+        'analytics_data',
+        'virtual_stats',
+        'logic2_state', // ★★★ 이 줄을 추가하세요. ★★★
+    ];
+
+    protected $casts = [
+        // JSON으로 저장된 텍스트를 자동으로 PHP 배열/객체로 변환
+        'coininfo' => 'array',
+        'chartResult' => 'array',
+        'pattern_stats' => 'array',
+        'logic_state' => 'array',
+        'logic3_patterns' => 'array',
+        'analytics_data' => 'array',
+        'pattern_3' => 'array',
+        'pattern_4' => 'array',
+        'pattern_5' => 'array',
+        'pattern_6' => 'array',
+        'virtual_stats' => 'array',
+        'logic2_state' => 'array',
+    ];
 
     // ★★★ undoRequest가 이제 파라미터를 받으므로 리스너에서 제거합니다. ★★★
     protected $listeners = ['addResultRequest', /*'undoRequest',*/ 'resetRequest', 'setCoinInfoRequest'];
@@ -32,25 +70,31 @@ class BacaraGame extends Component
     public function addResultRequest(string $type, string $selectedLogic, bool $isVirtualBetting, PredictionService $predictionService)
     {
         if (($type !== 'P' && $type !== 'B') || !Auth::check()) return;
-        
+
         $user = Auth::user();
         $userDbState = BacaraDb::firstOrCreate(['memberid' => $user->name], ['bcdata' => '']);
         
         $userDbState->bcdata .= $type;
         $this->jokboHistory = $userDbState->bcdata;
 
+        // 1. PredictionService를 호출하여 결과를 받습니다.
         $result = $predictionService->processTurn($userDbState, $selectedLogic, $isVirtualBetting);
-        $this->applyUpdates($result['updates'], $user->name);
         
-        foreach ($result['updates']['BacaraDb'] ?? [] as $field => $value) {
-            $userDbState->$field = $value;
+        // ★★★ 2. 'updates' 또는 'db_updates' 키를 안전하게 가져옵니다. ★★★
+        // $result['updates']가 있으면 그것을 사용하고, 없으면(??) $result['db_updates']를 사용합니다.
+        // 둘 다 없으면 안전하게 빈 배열([])을 사용합니다.
+        $updates = $result['updates'] ?? $result['db_updates'] ?? [];
+        
+        // 3. 안전하게 가져온 $updates 변수를 사용하여 DB 업데이트를 진행합니다.
+        $this->applyUpdates($updates, $user->name);
+        
+        // (이후 로직은 동일)
+        foreach ($updates['BacaraDb'] ?? [] as $field => $value) {
+            $userDbState->setAttribute($field, $value)->save();
         }
-        $userDbState->save();
         
         $this->updateCounts();
 
-        // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
-        // 1. 새로 추가된 아이템의 정보와 최신 카운트를 'itemAdded' 이벤트로 보냅니다.
         $this->emit('itemAdded', [
             'type' => $type,
             'counts' => [
@@ -60,8 +104,9 @@ class BacaraGame extends Component
             ]
         ]);
         
-        // ★★★ 핵심 수정: 예측 결과가 비어있더라도, null 값을 담아 이벤트를 '반드시' 발생시킵니다.
-        $this->emit('predictionUpdated', $result['prediction'] ?? null);
+        if (!empty($result['prediction'])) {
+            $this->emit('predictionUpdated', $result['prediction']);
+        }
     }
     
     public function undoRequest(string $selectedLogic, PredictionService $predictionService)
@@ -103,9 +148,6 @@ class BacaraGame extends Component
             $this->moneyArrStep = [];
             $this->updateAndSaveJokbo(true);
             $this->updateCounts();
-
-            // --- ▼▼▼ 핵심 변경 사항 ▼▼▼ ---
-            // 'gameReset' 이벤트를 보내 클라이언트에서 모든 것을 초기화하도록 합니다.
             $this->emit('gameReset');
         }
     }
@@ -133,11 +175,28 @@ class BacaraGame extends Component
     private function updateAndSaveJokbo($isReset = false)
     {
         $updateData = ['bcdata' => $this->jokboHistory];
+        
         if ($isReset) {
-            $updateData['pattern_3'] = '[]'; $updateData['pattern_4'] = '[]'; $updateData['pattern_5'] = '[]'; $updateData['pattern_6'] = '[]';
+            $emptyPatterns = json_encode(array_fill(0, 4, [
+                "bettingtype" => "none", "bettringround" => 0, "bettingpos" => "",
+                "isshow" => false, "lose" => 0, "measu" => 0, "icon" => ""
+            ]));
+
+            $updateData['pattern_3'] = $emptyPatterns;
+            $updateData['pattern_4'] = $emptyPatterns;
+            $updateData['pattern_5'] = $emptyPatterns;
+            $updateData['pattern_6'] = $emptyPatterns;
+
+            // ★★★ 핵심 수정: NULL 대신 "빈 JSON 배열"을 할당합니다. ★★★
+            $updateData['coininfo'] = '[]'; 
+            
+            // logic_state와 virtual_stats는 NULL을 허용한다고 가정하고 그대로 둡니다.
+            // 만약 이 필드들도 같은 오류를 일으킨다면, 각각 '[]'로 변경해주어야 합니다.
             $updateData['logic_state'] = null;
-            $updateData['coininfo'] = '[]';
+            $updateData['virtual_stats'] = null;
+            $updateData['logic2_state'] = null;
         }
+
         BacaraDb::updateOrCreate(['memberid' => Auth::user()->name], $updateData);
     }
     

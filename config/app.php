@@ -122,7 +122,7 @@ return [
     'key' => env('APP_KEY'),
 
     'cipher' => 'AES-256-CBC',
-    'baccara_debug' => env('BACCARA_DEBUG', false),
+    'baccara_debug' => env('BACCARA_DEBUG', true),
 
     /*
     |--------------------------------------------------------------------------

@@ -8,6 +8,8 @@ use Rubix\ML\Classifiers\LogisticRegression;
 use Rubix\ML\Datasets\Labeled;
 use Rubix\ML\Datasets\Unlabeled;
 use Illuminate\Support\Facades\Log;
+use App\Models\BacaraDb; // ★★★ BacaraDb 모델을 use 합니다.
+use Illuminate\Support\Facades\Auth; // ★★★ Auth 파사드를 use 합니다.
 
 class AiPredictionController extends Controller
 {
@@ -30,7 +32,7 @@ class AiPredictionController extends Controller
         $len = strlen($pb_jokbo);
 
         if (config('app.baccara_debug')) {
-            Log::debug("[AI] 수신된 족보: {$jokbo} (순수 길ی: {$len})");
+            Log::debug("[AI] 수신된 족보: {$jokbo} (순수 길이: {$len})");
         }
 
         // 최소 길이 체크 (학습용 4 + 라벨 1 이상)
@@ -95,7 +97,7 @@ class AiPredictionController extends Controller
                 $prediction_sample_array[] = ($ch === 'P') ? 1 : 0;
             }
 
-            // 8) 확률 예측 (배열 그대로 전달)
+            // 8) 확률 예측
             if (config('app.baccara_debug')) Log::debug("[AI] 확률 예측 시도...");
 
             $prediction_dataset = new Unlabeled([$prediction_sample_array]);
@@ -106,7 +108,6 @@ class AiPredictionController extends Controller
             }
 
             $first_prediction = $probabilities[0] ?? [];
-            // 라벨 키는 "P","B" 문자열로 나옴
             $p_probability = $first_prediction['P'] ?? 0.0;
             $b_probability = $first_prediction['B'] ?? 0.0;
 
@@ -116,6 +117,33 @@ class AiPredictionController extends Controller
             if (config('app.baccara_debug')) {
                 Log::debug("[AI] 최종 예측: {$recommendation}, 신뢰도: {$confidence}%");
             }
+
+            // --- ▼▼▼ 여기가 이번 수정의 핵심입니다. ▼▼▼ ---
+            // 9) 생성된 예측을 DB의 logic_state에 저장합니다.
+            $user = Auth::user();
+            if ($user) {
+                $userDbState = BacaraDb::firstWhere('memberid', $user->name);
+                if ($userDbState) {
+                    // 1. DB에서 값을 가져옵니다.
+                    $logic_state = $userDbState->logic_state;
+
+                    // 2. 값이 배열이 아니라면, 안전하게 빈 배열로 초기화합니다.
+                    if (!is_array($logic_state)) {
+                        $logic_state = [];
+                    }
+
+                    // 3. 이제 안전하게 값을 할당합니다.
+                    $logic_state['ai_prediction']['last_recommend'] = $recommendation;
+                    
+                    $userDbState->logic_state = $logic_state;
+                    $userDbState->save();
+                    
+                    if (config('app.baccara_debug')) {
+                        Log::debug("[AI] 예측 '{$recommendation}'을 DB logic_state에 저장했습니다.");
+                    }
+                }
+            }
+            // --- ▲▲▲ 여기가 이번 수정의 핵심입니다. ---
 
             return response()->json([
                 'success'     => true,

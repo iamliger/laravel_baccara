@@ -49,6 +49,8 @@ class BacaraDb extends Model
         'logic_state',
         'logic3_patterns',
         'analytics_data',
+        'virtual_stats',
+        'logic2_state',
     ];
 
     /**
@@ -63,10 +65,12 @@ class BacaraDb extends Model
         'logic_state' => 'array',
         'logic3_patterns' => 'array',
         'analytics_data' => 'array',
+        'virtual_stats' => 'array',
         'pattern_3' => 'array',
         'pattern_4' => 'array',
         'pattern_5' => 'array',
         'pattern_6' => 'array',
+        'logic2_state' => 'array',
     ];
 
     /**

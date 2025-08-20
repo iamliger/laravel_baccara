@@ -200,11 +200,26 @@
             const baccaraContainer = document.querySelector('.baccara-container');
             if (!baccaraContainer) return;
 
+            const defaultSettings = {
+                    gamesetting: false,
+                    soundsetting: false,
+                    chkmoneyinfo: false,
+                    chkconsole: true,
+                    chkvirtualbet: true,
+                    chkcopylog: true,
+                    chk_ai_predict: false
+                };
+
             const initialData = JSON.parse(baccaraContainer.dataset.initial || '{}');
+            console.log('initialData:', initialData);
+
+            let isInitialized = false; // ★★★ 1. 초기화 방지 플래그
             let jokboHistory, moneyArrStep, consoleMessages, currentSettings;
             let aiPredictionTriggered = false;
-            let isGameInProgress = false;
-            const $wire = @this;
+            let isGameInProgress = false; 
+            let inlineChartInstance = null;           
+
+            const $wire = @this;            
 
             const el = {
                 playerBtn: document.getElementById('player-btn'),
@@ -263,7 +278,17 @@
 
             // -----------------------------
             // Livewire 이벤트 수신
-            // -----------------------------
+            // -----------------------------            
+
+            function loadSettings() {                
+                try {
+                    const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+                    currentSettings = { ...defaultSettings, ...savedSettings };
+                } catch (e) {
+                    currentSettings = { ...defaultSettings };
+                }
+            }
+
             async function triggerAiPrediction() {
                 // 1. AI 기능 활성화 및 족보 길이 조건
                 const pureJokbo = jokboHistory.replace(/T/g, '');
@@ -401,14 +426,20 @@
             Livewire.on('gameReset', () => {
                 jokboHistory = '';
                 moneyArrStep = [];
+                aiPredictionTriggered = false; // AI 예측 트리거도 리셋
+                isGameInProgress = false;
 
                 redrawAllFromJokbo(); // 빈 족보로 그리므로 모든 그리드가 깨끗해집니다.
-
                 el.playerCountSpan.textContent = 0;
                 el.bankerCountSpan.textContent = 0;
                 el.totalCountSpan.textContent = 0;
+                el.predictionHeader.innerHTML = ''; // 헤더 클리어
 
-                saveState(); // 빈 상태를 저장합니다.
+                saveState();
+
+                //localStorage.removeItem(STORAGE_KEY);
+                //localStorage.removeItem(PREDICTION_STORAGE_KEY); // 예측 기록 삭제
+                //localStorage.removeItem(CONSOLE_STORAGE_KEY); // 콘솔도 리셋
 
                 showToast('center-toast', '리셋이 완료되었습니다.', {
                     type: 'success', // 성공 타입 (초록색)
@@ -417,13 +448,17 @@
                         // 토스트가 사라진 후, 금액 설정 모달을 엽니다.
                         clearConsole();
                         addConsoleMessage('게임을 리셋하였습니다.', 'system');
+                        applySettings(); 
                         openModal('moneystepinfo-modal');
                     }
                 });
             });
 
-            // 나머지 이벤트 리스너는 그대로 유지됩니다.
-            Livewire.on('predictionUpdated', (predictionData) => renderPrediction(predictionData));
+            Livewire.on('predictionUpdated', (predictionData) => {                
+                renderPrediction(predictionData);
+                logRecommendation(predictionData?.predictions, predictionData?.type);
+            });
+
             Livewire.on('showCoinInfoModal', () => openModal('moneystepinfo-modal'));
             Livewire.on('coinInfoUpdated', (newMoneySteps) => {
                 console.log('금액 설정이 완료되었습니다:', newMoneySteps);
@@ -527,11 +562,17 @@
                 saveConsole();
             }
 
-            function applySettings(settings) {
-                if (el.interactiveArea) el.interactiveArea.style.display = settings.chkconsole ? '' : 'none';
-                
+            function applySettings() {
+                if (!currentSettings) return;
+
+                // 콘솔 박스 보이기/숨기기
+                if (el.interactiveArea) {
+                    el.interactiveArea.style.display = currentSettings.chkconsole ? '' : 'none';
+                }
+
+                // ★★★ 로그 복사 버튼 보이기/숨기기 로직 추가 ★★★
                 if (el.copyLogBtn) {
-                    el.copyLogBtn.classList.toggle('hidden', !settings.chkcopylog);
+                    el.copyLogBtn.style.display = currentSettings.chkcopylog ? 'block' : 'none';
                 }
 
                 el.settingsToggles.forEach(toggle => {
@@ -540,20 +581,23 @@
                     toggle.setAttribute('aria-checked', isChecked);
 
                     // Tailwind CSS 클래스 토글로 시각적 상태 변경
-                    const knob = toggle.querySelector('.setting-toggle-knob');
+                    /*const knob = toggle.querySelector('.setting-toggle-knob');
                     toggle.classList.toggle('bg-indigo-600', isChecked);
                     toggle.classList.toggle('bg-gray-700', !isChecked);
                     if (knob) {
                         knob.classList.toggle('translate-x-5', isChecked);
                         knob.classList.toggle('translate-x-0', !isChecked);
-                    }
+                    }*/
                 });
             }
 
             function saveSettings() {
                 try {
                     localStorage.setItem(SETTINGS_KEY, JSON.stringify(currentSettings));
-                } catch (e) {}
+                    console.log('설정 저장됨:', currentSettings);
+                } catch (e) {
+                    console.error('설정 저장 실패', e);
+                }
             }
 
             function openModal(modalId) {
@@ -713,8 +757,7 @@
                 // 예측 데이터가 없거나 비어있으면 헤더를 비웁니다.
                 if (!data || !data.predictions || data.predictions.length === 0) {
                     el.predictionHeader.innerHTML = '';
-                    // 예측이 없을 때 콘솔 추천 메시지도 남기지 않도록 수정
-                    logRecommendation([], data ? data.type : null);
+                    localStorage.removeItem(PREDICTION_STORAGE_KEY);
                     return;
                 }
 
@@ -740,9 +783,7 @@
                 }).join('');
 
                 el.predictionHeader.innerHTML = predictionHtml;
-
-                localStorage.setItem(PREDICTION_STORAGE_KEY, JSON.stringify(data));
-                logRecommendation(data.predictions, data.type);
+                localStorage.setItem(PREDICTION_STORAGE_KEY, JSON.stringify(data));                
             }
 
             function logRecommendation(predictions, logicType) {
@@ -828,16 +869,97 @@
                 }
             }
 
+            async function showOrUpdateChart() {
+                // 1. 차트가 아직 생성되지 않았다면, 모든 옵션을 포함하여 생성합니다.
+                if (!inlineChartInstance) {
+                    const ctx = document.getElementById('analytics-chart-inline')?.getContext('2d');
+                    if (ctx && typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+                        // 플러그인을 Chart.js에 등록합니다.
+                        Chart.register(ChartDataLabels);
+
+                        const isDarkMode = document.documentElement.classList.contains('dark');
+                        const tickColor = isDarkMode ? '#9ca3af' : '#6b7280';
+                        const labelColor = isDarkMode ? '#e5e7eb' : '#374151';
+
+                        inlineChartInstance = new Chart(ctx, {
+                            type: 'bar',
+                            data: { labels: [], datasets: [] },
+                            options: {
+                                maintainAspectRatio: false, // 1. 콘솔 박스 크기에 꽉 차게
+                                indexAxis: 'y', responsive: true,
+                                layout: { // 차트 내부 여백 조절
+                                    padding: { top: 5, bottom: 5, left: 5, right: 40 } 
+                                },
+                                plugins: { 
+                                    legend: { display: false },
+                                    tooltip: { // 3. 툴팁에 승/패 합계 표시
+                                        callbacks: {
+                                            label: function(context) {
+                                                const ds = context.dataset;
+                                                const i = context.dataIndex;
+                                                return ` 승률: ${ds.data[i].toFixed(1)}% (${ds.wins[i]}승 ${ds.losses[i]}패)`;
+                                            }
+                                        }
+                                    },
+                                    datalabels: { // 2. 막대 옆에 총 합계 표시
+                                        align: 'end', anchor: 'end',
+                                        color: labelColor,
+                                        font: { size: 11, weight: 'bold' },
+                                        formatter: function(value, context) {
+                                            const ds = context.dataset;
+                                            const i = context.dataIndex;
+                                            const total = ds.wins[i] + ds.losses[i];
+                                            return `(${total}회)`;
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: { ticks: { color: tickColor, callback: (v) => v + '%' }, beginAtZero: true, max: 100 },
+                                    y: {
+                                        ticks: { color: tickColor, font: { size: 11 }, autoSkip: false },
+                                        // ★★★ 막대를 굵게 만드는 핵심 옵션 ★★★
+                                        grid: { display: false }, // 세로선 제거
+                                        barPercentage: 0.8,
+                                        categoryPercentage: 0.8
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+                
+                // 2. 서버에 가상 통계 데이터를 요청합니다.
+                try {
+                    const response = await axios.get('/api/virtual-stats');
+                    const result = response.data;
+                    if (result.success && inlineChartInstance) {
+                        inlineChartInstance.data.labels = result.labels;
+                        inlineChartInstance.data.datasets = result.datasets;
+                        inlineChartInstance.update();
+                    }
+                } catch (error) {
+                    console.error("차트 데이터 로딩 실패:", error);
+                }
+            }
+
             function bindEvents() {
                 if (el.playerBtn) el.playerBtn.onclick = () => {                    
                     addConsoleMessage('플레이어를 선택했습니다.', 'player');
                     $wire.call('addResultRequest', 'P', getSelectedLogic(), currentSettings.chkvirtualbet);
                     isGameInProgress = true;
+                    // 차트가 보이는 상태일 때만 업데이트
+                    if (el.viewToggleButton.dataset.currentView === 'chart') {
+                        showOrUpdateChart();
+                    }
                 };
                 if (el.bankerBtn) el.bankerBtn.onclick = () => {
                     addConsoleMessage('뱅커를 선택했습니다.', 'banker');
                     $wire.call('addResultRequest', 'B', getSelectedLogic(), currentSettings.chkvirtualbet);
                     isGameInProgress = true;
+                    // 차트가 보이는 상태일 때만 업데이트
+                    if (el.viewToggleButton.dataset.currentView === 'chart') {
+                        showOrUpdateChart();
+                    }
                 };
                 if (el.undoBtn) el.undoBtn.onclick = () => {
                     addConsoleMessage('마지막 입력을 취소했습니다.', 'system');
@@ -845,13 +967,19 @@
                 };
                 if (el.resetBtn) el.resetBtn.onclick = () => {
                     if (confirm('정말로 모든 기록을 초기화하시겠습니까?')) {
-                        saveSettings();
-                        console.log('리셋 시 환경설정이 저장되었습니다:', currentSettings);
-
+                        
+                        localStorage.removeItem(STORAGE_KEY);
                         localStorage.removeItem(PREDICTION_STORAGE_KEY);
+                        localStorage.removeItem(CONSOLE_STORAGE_KEY);
+
                         aiPredictionTriggered = false;
                         isGameInProgress = false;
-                        $wire.call('resetRequest');
+                        //$wire.call('resetRequest');
+                        $wire.call('resetRequest').then(() => {
+                            // 3. ★★★ 서버 작업이 성공적으로 완료되면, 페이지를 새로고침합니다. ★★★
+                            window.location.reload();
+                        });
+                        console.log('리셋(기록만 초기화) 완료. 설정은 유지됩니다:', currentSettings);
                     }
                 };
                 if (el.logicBtnGroup) el.logicBtnGroup.onclick = (e) => {
@@ -880,6 +1008,7 @@
                         el.chartWrapper.classList.remove('hidden');
                         el.viewToggleButton.textContent = '콘솔 보기';
                         el.viewToggleButton.dataset.currentView = 'chart';
+                        showOrUpdateChart();
                     } else {
                         el.chartWrapper.classList.add('hidden');
                         el.consoleWrapper.classList.remove('hidden');
@@ -890,6 +1019,8 @@
                 document.onclick = (e) => {
                     if (e.target.closest('#open-settings-modal-btn')) {
                         e.preventDefault();
+                        loadSettings(); 
+                        applySettings(); 
                         openModal('setting-box-modal');
                     }
                 };
@@ -901,7 +1032,7 @@
                         //const isChecked = toggle.getAttribute('aria-checked') === 'true';
                         //currentSettings[key] = !isChecked;
                         currentSettings[key] = !currentSettings[key];
-                        applySettings(currentSettings);
+                        applySettings();
                         saveSettings();
                     };
                 });
@@ -946,6 +1077,26 @@
                         openMypageModal();
                     };
                 }
+                if (el.viewToggleButton) el.viewToggleButton.onclick = () => {
+                    const cur = el.viewToggleButton.dataset.currentView;
+                    if (cur === 'console') {
+                        // 콘솔 -> 차트로 전환
+                        el.consoleWrapper.classList.add('hidden');
+                        el.chartWrapper.classList.remove('hidden');
+                        el.viewToggleButton.textContent = '콘솔 보기';
+                        el.viewToggleButton.dataset.currentView = 'chart';
+                        
+                        // 차트를 보여주거나 업데이트하는 함수를 호출합니다.
+                        showOrUpdateChart(); 
+
+                    } else {
+                        // 차트 -> 콘솔로 전환
+                        el.chartWrapper.classList.add('hidden');
+                        el.consoleWrapper.classList.remove('hidden');
+                        el.viewToggleButton.textContent = '차트 보기';
+                        el.viewToggleButton.dataset.currentView = 'console';
+                    }
+                };
 
                 window.addEventListener('beforeunload', function (event) {
                     // 게임이 진행 중일 때만 경고 메시지를 활성화합니다.
@@ -959,30 +1110,32 @@
             }
 
             function init() {
+                if (isInitialized) return;
+                isInitialized = true;
+
                 console.log('Baccara System Initialized');
+                
                 const initialData = JSON.parse(baccaraContainer.dataset.initial || '{}');
 
                 jokboHistory = localStorage.getItem(STORAGE_KEY) || initialData.jokboHistory || "";
                 moneyArrStep = initialData.moneyArrStep || [];
 
-                const defaultSettings = {
-                    gamesetting: false,
-                    soundsetting: false,
-                    chkmoneyinfo: false,
-                    chkconsole: true,
-                    chkvirtualbet: true,
-                    chkcopylog: true,
-                    chk_ai_predict: false
-                };
+                loadSettings();
+                applySettings();
+
                 try {
-                    const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-                    currentSettings = {
-                        ...defaultSettings,
-                        ...savedSettings
-                    };
+                    const saved = localStorage.getItem(SETTINGS_KEY);
+                    if (saved) {
+                        currentSettings = { ...defaultSettings, ...JSON.parse(saved) };
+                    } else {
+                        // 없으면 기본값 사용
+                        currentSettings = { ...defaultSettings };
+                        console.log('기본값 사용:', currentSettings);
+                    }
                 } catch (e) {
-                    currentSettings = defaultSettings;
-                }
+                    currentSettings = { ...defaultSettings };
+                    console.warn('설정 불러오기 실패, 기본값 사용', e);
+                }                
 
                 const savedLogic = localStorage.getItem('selectedLogic') || 'logic1';
                 updateLogicButtonsUI(savedLogic);
@@ -1023,13 +1176,13 @@
 
                 redrawAllFromJokbo();
                 updateCounts();
-                applySettings(currentSettings);
+                
 
                 if (!moneyArrStep || moneyArrStep.length === 0) {
                     openModal('moneystepinfo-modal');
                 }
 
-                // ★★★ 페이지 로드 시 테마 복원 ★★★
+                
                 const savedTheme = localStorage.getItem('theme') || 'dark'; // 기본값을 다크로 설정
                 const isDark = savedTheme === 'dark';
                 document.documentElement.classList.toggle('dark', isDark);

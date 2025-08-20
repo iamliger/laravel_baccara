@@ -260,6 +260,11 @@ html:not(.dark) .sidebar {
     flex-direction: column;
     gap: 0.5rem;
 }
+
+#chart-wrapper .console-box {
+    padding: 0.5rem; /* 8px의 패딩을 줍니다. (150 - 8*2 = 134px 확보) */
+}
+
 #copy-log-btn {
     position: relative;
     left: 0.75rem;
