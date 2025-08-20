@@ -45,7 +45,13 @@ class ChartController extends Controller
 
         // 2. 분리된 다른 로직들을 먼저 처리합니다.
         foreach ($other_stats as $logicName => $result) {
-            $formattedName = str_replace(['_'], [' '], str_replace('logic', '로직 ', $logicName));
+
+            if ($logicName === 'AI_Prediction_AI') {
+                $formattedName = 'AI 예측';
+            } else {
+                $formattedName = str_replace(['_'], [' '], str_replace('logic', '로직 ', $logicName));
+            }
+            
             $wins = $result['wins'] ?? 0;
             $losses = $result['losses'] ?? 0;
             $total = $wins + $losses;

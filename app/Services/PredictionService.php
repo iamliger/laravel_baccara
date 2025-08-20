@@ -49,15 +49,28 @@ class PredictionService
             // 1. 이전 족보 상태를 기준으로 모든 로직의 '지난 예측'을 미리 계산합니다.
             $previousPredictions = [];
             foreach($allLogics as $logicName) {
-                // 임시로 족보를 변경하여 이전 상태의 예측을 가져옵니다.
-                $userDbState->bcdata = $previousJokbo; 
-                $result = $this->runSingleLogic($userDbState, $logicName, false);
+                $tempUserDbState = clone $userDbState;
+                $tempUserDbState->bcdata = $previousJokbo; 
+                $result = $this->runSingleLogic($tempUserDbState, $logicName, false);
                 $previousPredictions[$logicName] = $result['prediction']['predictions'] ?? [];
             }
+
+            // 2. 'AI 예측'의 지난 예측도 logic_state에서 가져옵니다.
+            $all_logic_states = $userDbState->logic_state ?? [];
+            $ai_last_pred = $all_logic_states['ai_prediction']['last_recommend'] ?? null;
+            if ($ai_last_pred) {
+                 // 다른 로직들과 동일한 구조로 맞춰서 배열에 추가
+                 $previousPredictions['AI_Prediction'][] = [
+                     'recommend' => $ai_last_pred,
+                     'sub_type' => 'AI' // 차트 라벨을 위한 이름 지정
+                 ];
+            }
+
             $userDbState->bcdata = $jokbo; // 족보를 다시 원상 복구합니다.
 
             // 2. '지난 예측'과 '현재 결과'를 비교하여 가상 통계를 업데이트합니다.
             $currentVirtualStats = $userDbState->virtual_stats ?? [];
+            $lastPos = substr($jokbo, -1);
             foreach($previousPredictions as $logicName => $predictions) {
                 foreach($predictions as $prediction) {
                     $this->updateVirtualStats($currentVirtualStats, $logicName, $prediction, $lastPos);
@@ -65,19 +78,14 @@ class PredictionService
             }
             $updates['BacaraDb']['virtual_stats'] = $currentVirtualStats;
 
-            // 3. 현재 족보를 기준으로 '다음 예측'을 생성합니다.
-            foreach ($allLogics as $logicName) {
-                $logicResult = $this->runSingleLogic($userDbState, $logicName, true);
-                if ($logicName === $selectedLogic) {
-                    $mainPredictionResult = $logicResult['prediction'];
-                    // 가상 모드에서는 로직1의 DB 상태(pattern_*)는 업데이트하지 않습니다.
-                    if (isset($logicResult['db_updates']['BacaraDb'])) {
-                         unset($logicResult['db_updates']['BacaraDb']);
-                    }
-                    $updates = array_merge_recursive($updates, $logicResult['db_updates']);
-                }
+            $logicResult = $this->runSingleLogic($userDbState, $selectedLogic, true);
+            $mainPredictionResult = $logicResult['prediction'];
+            if ($selectedLogic === 'logic1' && isset($logicResult['db_updates']['BacaraDb'])) {
+                 unset($logicResult['db_updates']['BacaraDb']['virtual_stats']);
             }
+            $updates = array_merge_recursive($updates, $logicResult['db_updates']);
 
+            if (config('app.baccara_debug')) Log::debug("==================================================");
             return ['updates' => $updates, 'prediction' => $mainPredictionResult];
 
         // 가상 배팅이 꺼져 있을 때 (단일 모드)
@@ -141,12 +149,18 @@ class PredictionService
             'B' => ['name' => 'pattern2', 'sequence' => [-1, -1, 1, 1, -1, -1, 1]]
         ];
 
-        $all_logic_states_before = $userDbState->logic_state ?? [];
+        $all_logic_states_before = $userDbState->logic_state;
+        // ★★★ 안전장치: $all_logic_states_before가 배열이 아니면, 빈 배열로 강제 초기화합니다.
+        if (!is_array($all_logic_states_before)) {
+            $all_logic_states_before = [];
+        }
         $logic2_states = $all_logic_states_before['logic2'] ?? [];
         
         $next_states = [];
         $allPredictions = [];
-        $moneySteps = $userDbState->coininfo ?? [];
+        $coininfo = $userDbState->coininfo;
+        $moneySteps = is_string($coininfo) ? json_decode($coininfo, true) : $coininfo;
+        if (!is_array($moneySteps)) $moneySteps = [];
 
         foreach ($patterns as $key => $pattern_info) {
             // ★★★ 각 패턴의 lose 카운터도 불러옵니다.
@@ -177,7 +191,7 @@ class PredictionService
         }
 
         $all_logic_states_before['logic2'] = $next_states;
-        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
+        $updates['BacaraDb']['logic_state'] = $all_logic_states_before;
         
         return [
             'prediction' => ['type' => 'logic2', 'predictions' => $allPredictions],
@@ -252,7 +266,12 @@ class PredictionService
         }
         $pattern_count = count($sequences);
 
-        $all_logic_states_before = $userDbState->logic_state ?? [];
+        //$all_logic_states_before = $userDbState->logic_state ?? [];
+        $all_logic_states_before = $userDbState->logic_state;
+        // ★★★ 안전장치: $all_logic_states_before가 배열이 아니면, 빈 배열로 강제 초기화합니다.
+        if (!is_array($all_logic_states_before)) {
+            $all_logic_states_before = [];
+        }
         $logic3_states = $all_logic_states_before['logic3'] ?? [];
         
         // 1. '이전' 상태를 정확히 불러옵니다.
@@ -324,7 +343,9 @@ class PredictionService
                 if (config('app.baccara_debug')) Log::debug(" [logic3] [다수결 결과]: {$next_final_prediction} ( {$counts[$next_final_prediction]} / {$pattern_count}표 )");
                 
                 // 5. 단계별 금액 적용
-                $moneySteps = $userDbState->coininfo ?? [];
+                $coininfo = $userDbState->coininfo;
+                $moneySteps = is_string($coininfo) ? json_decode($coininfo, true) : $coininfo;
+                if (!is_array($moneySteps)) $moneySteps = [];
                 $amount = $moneySteps[$next_lose] ?? 1000; // '다음' lose 카운트에 맞는 금액
 
                 $predictions[] = [
@@ -342,7 +363,7 @@ class PredictionService
         $next_states_to_save['final_prediction'] = $next_final_prediction;
         $next_states_to_save['lose'] = $next_lose; // 업데이트된 lose 카운트 저장
         $all_logic_states_before['logic3'] = $next_states_to_save;
-        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
+        $updates['BacaraDb']['logic_state'] = $all_logic_states_before;
         
         return [
             'prediction' => ['type' => 'logic3', 'predictions' => $predictions],
@@ -367,10 +388,15 @@ class PredictionService
         }
 
         // 1. DB에서 로직 4의 '이전 상태'를 불러옵니다.
-        $all_logic_states_before = $userDbState->logic_state ?? [];
+        //$all_logic_states_before = $userDbState->logic_state ?? [];
+        $all_logic_states_before = $userDbState->logic_state;
+        // ★★★ 안전장치: $all_logic_states_before가 배열이 아니면, 빈 배열로 강제 초기화합니다.
+        if (!is_array($all_logic_states_before)) {
+            $all_logic_states_before = [];
+        }
         $logic4_states = $all_logic_states_before['logic4'] ?? [];
         
-        // ★★★ 2. '매'별로 이전 예측과 lose 카운터를 개별적으로 가져옵니다. ★★★
+        // ★★★ 2. '매'별로 이전 예측과 lose 카운터를 개별적으로 가져옵니다. ★★★        
         $last_pred_3mae = $logic4_states['pred_3mae'] ?? null;
         $lose_3mae = $logic4_states['lose_3mae'] ?? 0;
 
@@ -407,7 +433,9 @@ class PredictionService
         // 4. '매'별로 새로운 예측을 생성합니다.
         $allPredictions = [];
         $next_states = [];
-        $moneySteps = $userDbState->coininfo ?? [];
+        $coininfo = $userDbState->coininfo;
+        $moneySteps = is_string($coininfo) ? json_decode($coininfo, true) : $coininfo;
+        if (!is_array($moneySteps)) $moneySteps = [];
 
         // 3매 예측
         if ($pb_len >= 2) {
@@ -440,7 +468,7 @@ class PredictionService
         $next_states['lose_5mae'] = $next_lose_5mae;
         
         $all_logic_states_before['logic4'] = $next_states;
-        $updates['BacaraDb']['logic_state'] = json_encode($all_logic_states_before);
+        $updates['BacaraDb']['logic_state'] = $all_logic_states_before;
         
         return [
             'prediction' => ['type' => 'logic4', 'predictions' => $allPredictions],
@@ -507,7 +535,11 @@ class PredictionService
             foreach ($patterndb as $p) {
                 if (($p['bettringround'] ?? 0) === ($slen + 1)) {
                     $stepIndex = $p['lose'] ?? 0;
-                    $moneySteps = $userDbState->coininfo ?? [];
+                    
+                    $coininfo = $userDbState->coininfo;
+                    $moneySteps = is_string($coininfo) ? json_decode($coininfo, true) : $coininfo;
+                    if (!is_array($moneySteps)) $moneySteps = [];
+
                     $amount = $moneySteps[$stepIndex] ?? 1000; // 단계에 맞는 금액, 없으면 기본값 1000
 
                     $allPredictions[] = [
