@@ -275,6 +275,7 @@
             const CONSOLE_STORAGE_KEY = `baccara_console_{{ auth()->user()->name }}`;
             const SETTINGS_KEY = `baccara_settings_{{ auth()->user()->name }}`;
             const PREDICTION_STORAGE_KEY = `baccara_prediction_{{ auth()->user()->name }}`;
+            const LOGIC_USAGE_KEY = `logic_usage_counts_{{ auth()->user()->name }}`;
 
             // -----------------------------
             // Livewire 이벤트 수신
@@ -608,6 +609,8 @@
             function closeModal(modalId) {
                 const modal = document.getElementById(modalId);
                 if (modal) modal.classList.add('hidden');
+                el.copyLogBtn.style.display = currentSettings.chkcopylog ? 'block' : 'none';
+                //console.log('close Modal');
             }
 
             function updateLogicButtonsUI(selectedValue) {
@@ -850,7 +853,7 @@
             /**
              * 마이페이지 모달을 열고 서버에서 콘텐츠를 불러오는 함수
              */
-            async function openMypageModal() {
+             async function openMypageModal() {
                 const modalBody = document.getElementById('mypage-modal-body');
                 if (!modalBody) return;
                 
@@ -858,11 +861,18 @@
                 modalBody.innerHTML = `<div class="flex items-center justify-center h-32"><i class="ti ti-loader animate-spin text-3xl text-gray-500"></i></div>`;
                 
                 try {
+                    const logicUsage = localStorage.getItem('logic_usage_counts_{{ auth()->user()->name }}') || '{}';
+
                     // axios를 사용하여 서버에 AJAX 요청
                     const response = await axios.get("{{ route('mypage.index') }}", {
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        params: {
+                            logic_usage: logicUsage 
+                        }
                     });
                     modalBody.innerHTML = response.data;
+                    //console.log("Mypage loading success:", response.data, logicUsage);
+
                 } catch (error) {
                     console.error("Mypage loading failed:", error);
                     modalBody.innerHTML = `<p class="text-red-400">콘텐츠를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.</p>`;
@@ -987,7 +997,30 @@
                     if (!btn) return;
                     const v = btn.dataset.value;
                     updateLogicButtonsUI(v);
+
+                    //const usageKey = 'logic_usage_counts_{{ auth()->user()->name }}';
                     localStorage.setItem('selectedLogic', v);
+
+                    //let usageCounts = {};
+                    /*try {
+                        usageCounts = JSON.parse(localStorage.getItem(usageKey)) || {};
+                    } catch (e) {
+                        usageCounts = {};
+                    }*/
+
+                    try {
+                        const counts = JSON.parse(localStorage.getItem(LOGIC_USAGE_KEY)) || {};
+                        counts[v] = (counts[v] || 0) + 1;
+                        localStorage.setItem(LOGIC_USAGE_KEY, JSON.stringify(counts));
+                    } catch (e) {
+                        console.error('로직 사용 횟수 저장 실패:', e);
+                    }
+
+                    // 2. 현재 클릭된 로직의 카운트를 1 증가시킵니다.
+                    //usageCounts[v] = (usageCounts[v] || 0) + 1;
+
+                    // 3. 변경된 카운트를 다시 localStorage에 저장합니다.
+                    //localStorage.setItem(usageKey, JSON.stringify(usageCounts));
 
                     // ★★★ 여기에 토스트 호출 추가 ★★★
                     showToast('center-toast', `'${v}' 로직으로 변경되었습니다.`, {

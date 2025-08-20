@@ -51,6 +51,7 @@ class BacaraDb extends Model
         'analytics_data',
         'virtual_stats',
         'logic2_state',
+        'game_history',
     ];
 
     /**
@@ -71,6 +72,7 @@ class BacaraDb extends Model
         'pattern_5' => 'array',
         'pattern_6' => 'array',
         'logic2_state' => 'array',
+        'game_history' => 'array',
     ];
 
     /**

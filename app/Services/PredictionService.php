@@ -70,14 +70,17 @@ class PredictionService
 
             // 2. '지난 예측'과 '현재 결과'를 비교하여 가상 통계를 업데이트합니다.
             $currentVirtualStats = $userDbState->virtual_stats ?? [];
+            $currentGameHistory = $userDbState->game_history ?? [];
+
             $lastPos = substr($jokbo, -1);
+
             foreach($previousPredictions as $logicName => $predictions) {
                 foreach($predictions as $prediction) {
-                    $this->updateVirtualStats($currentVirtualStats, $logicName, $prediction, $lastPos);
+                    $this->updateVirtualStats($currentVirtualStats, $currentGameHistory, $logicName, $prediction, $lastPos);
                 }
             }
             $updates['BacaraDb']['virtual_stats'] = $currentVirtualStats;
-
+            $updates['BacaraDb']['game_history'] = $currentGameHistory;
             $logicResult = $this->runSingleLogic($userDbState, $selectedLogic, true);
             $mainPredictionResult = $logicResult['prediction'];
             if ($selectedLogic === 'logic1' && isset($logicResult['db_updates']['BacaraDb'])) {
@@ -108,22 +111,28 @@ class PredictionService
         return ['updates' => [], 'prediction' => null];
     }
 
-    private function updateVirtualStats(array &$stats, string $logicName, array $prediction, string $lastPos)
+    private function updateVirtualStats(array &$stats, array &$history, string $logicName, array $prediction, string $lastPos)
     {
         $predictedPos = $prediction['recommend'] ?? null;
-        if (!$predictedPos) return;
+        if (!$predictedPos || $lastPos === 'T') return;
 
-        // 로직1,4는 sub_type을 포함하여 더 상세하게 기록
-        $statKey = ($logicName === 'logic1' || $logicName === 'logic4') 
-                    ? "{$logicName}_{$prediction['sub_type']}" 
-                    : $logicName;
+        $statKey = $logicName;
+        if (($logicName === 'logic1' || $logicName === 'logic4') && !empty($prediction['sub_type'])) {
+            $statKey = "{$logicName}_{$prediction['sub_type']}";
+        }
 
-        // 해당 키가 없으면 초기화
         if (!isset($stats[$statKey])) {
             $stats[$statKey] = ['wins' => 0, 'losses' => 0];
         }
 
         $isWin = ($predictedPos === $lastPos);
+
+        // ★★★ 이제 $history 변수가 정상적으로 인식됩니다. ★★★
+        if (!isset($history[$statKey])) {
+            $history[$statKey] = [];
+        }
+        $history[$statKey][] = $isWin ? 'W' : 'L'; // 'W' (Win), 'L' (Loss)
+
         if ($isWin) {
             $stats[$statKey]['wins']++;
             if (config('app.baccara_debug')) Log::debug(" [가상 통계] {$statKey}: 승리 (예측:{$predictedPos}, 실제:{$lastPos})");
