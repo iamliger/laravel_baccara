@@ -31,14 +31,13 @@ class PredictionService
     public function processTurn(BacaraDb $userDbState, string $selectedLogic, bool $isVirtualBetting): array
     {
         $jokbo = $userDbState->bcdata ?? '';
-        $lastPos = substr($jokbo, -1);
-        $updates = ['BacaraDb' => []]; // Ticket 업데이트는 이제 사용하지 않음
+        $updates = ['BacaraDb' => []];
 
-        // 가상 배팅이 켜져 있을 때 (다중 분석 모드)
         if ($isVirtualBetting && strlen($jokbo) > 1) {
             if (config('app.baccara_debug')) {
                 Log::debug("==================================================");
                 Log::debug("가상 배팅 모드 실행 | 현재 족보: {$jokbo}");
+                //Log::debug("BacaraDb: {$userDbState->coininfo}");
                 Log::debug("==================================================");
             }
             
@@ -46,52 +45,64 @@ class PredictionService
             $mainPredictionResult = null;
             $previousJokbo = substr($jokbo, 0, -1);
             
-            // 1. 이전 족보 상태를 기준으로 모든 로직의 '지난 예측'을 미리 계산합니다.
+            // 1. 이전 족보 상태를 기준으로 모든 로직의 '지난 예측'을 미리 계산
             $previousPredictions = [];
             foreach($allLogics as $logicName) {
                 $tempUserDbState = clone $userDbState;
                 $tempUserDbState->bcdata = $previousJokbo; 
+                // ★★★ 'should_update_stats'를 false로 전달하여 불필요한 DB 상태 변경 방지
                 $result = $this->runSingleLogic($tempUserDbState, $logicName, false);
                 $previousPredictions[$logicName] = $result['prediction']['predictions'] ?? [];
             }
-
-            // 2. 'AI 예측'의 지난 예측도 logic_state에서 가져옵니다.
+            
             $all_logic_states = $userDbState->logic_state ?? [];
             $ai_last_pred = $all_logic_states['ai_prediction']['last_recommend'] ?? null;
             if ($ai_last_pred) {
-                 // 다른 로직들과 동일한 구조로 맞춰서 배열에 추가
-                 $previousPredictions['AI_Prediction'][] = [
-                     'recommend' => $ai_last_pred,
-                     'sub_type' => 'AI' // 차트 라벨을 위한 이름 지정
-                 ];
+                 $previousPredictions['AI_Prediction'][] = ['recommend' => $ai_last_pred, 'sub_type' => 'AI', 'lose_count' => 0];
             }
 
-            $userDbState->bcdata = $jokbo; // 족보를 다시 원상 복구합니다.
-
-            // 2. '지난 예측'과 '현재 결과'를 비교하여 가상 통계를 업데이트합니다.
+            // 2. '지난 예측'과 '현재 결과'를 비교하여 가상 통계 업데이트
             $currentVirtualStats = $userDbState->virtual_stats ?? [];
             $currentGameHistory = $userDbState->game_history ?? [];
+            $lastPos = substr($jokbo, -1);            
+            $coininfoRaw = $userDbState->coininfo ?? null;
 
-            $lastPos = substr($jokbo, -1);
-
+            if (is_array($coininfoRaw)) {
+                // 이미 배열
+                $moneySteps = $coininfoRaw;
+            } elseif (is_string($coininfoRaw)) {
+                // 문자열(JSON)인 경우 디코드
+                $decoded = json_decode($coininfoRaw, true);
+                $moneySteps = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : [];
+            } else {
+                // 그 외 타입은 빈 배열
+                $moneySteps = [];
+            }            
+            /*if (config('app.baccara_debug')) {
+                Log::debug('[금액확인] : ', ['moneySteps' => $moneySteps]);
+            }*/
+            
             foreach($previousPredictions as $logicName => $predictions) {
                 foreach($predictions as $prediction) {
-                    $this->updateVirtualStats($currentVirtualStats, $currentGameHistory, $logicName, $prediction, $lastPos);
+                    // ★★★ 더 이상 $previousLoses를 전달할 필요 없음
+                    $this->updateVirtualStats($currentVirtualStats, $currentGameHistory, $logicName, $prediction, $lastPos, $moneySteps);
                 }
             }
             $updates['BacaraDb']['virtual_stats'] = $currentVirtualStats;
             $updates['BacaraDb']['game_history'] = $currentGameHistory;
+                        
+            // 3. 현재 족보 기준 '다음 예측' 생성
+            $userDbState->bcdata = $jokbo;
             $logicResult = $this->runSingleLogic($userDbState, $selectedLogic, true);
             $mainPredictionResult = $logicResult['prediction'];
-            if ($selectedLogic === 'logic1' && isset($logicResult['db_updates']['BacaraDb'])) {
-                 unset($logicResult['db_updates']['BacaraDb']['virtual_stats']);
+            if (isset($logicResult['db_updates']['BacaraDb'])) {
+                 unset($logicResult['db_updates']['BacaraDb']['virtual_stats'], $logicResult['db_updates']['BacaraDb']['game_history']);
             }
             $updates = array_merge_recursive($updates, $logicResult['db_updates']);
 
             if (config('app.baccara_debug')) Log::debug("==================================================");
-            return ['updates' => $updates, 'prediction' => $mainPredictionResult];
 
-        // 가상 배팅이 꺼져 있을 때 (단일 모드)
+            return ['updates' => $updates, 'prediction' => $mainPredictionResult];
         } else {
             return $this->runSingleLogic($userDbState, $selectedLogic, true);
         }
@@ -111,34 +122,80 @@ class PredictionService
         return ['updates' => [], 'prediction' => null];
     }
 
-    private function updateVirtualStats(array &$stats, array &$history, string $logicName, array $prediction, string $lastPos)
+    private function updateVirtualStats(array &$stats, array &$history, string $logicName, array $prediction, string $lastPos, array $moneySteps)
     {
         $predictedPos = $prediction['recommend'] ?? null;
         if (!$predictedPos || $lastPos === 'T') return;
 
         $statKey = $logicName;
-        if (($logicName === 'logic1' || $logicName === 'logic4') && !empty($prediction['sub_type'])) {
+        $loseKey = $logicName;
+        // AI 예측은 sub_type이 없으므로 별도 처리
+        if ($logicName === 'AI_Prediction') {
+            $statKey = 'AI_Prediction_AI';
+            $loseKey = $statKey;
+        } 
+        // 로직1,4는 sub_type을 포함하여 더 상세하게 기록
+        elseif (($logicName === 'logic1' || $logicName === 'logic4') && !empty($prediction['sub_type'])) {
             $statKey = "{$logicName}_{$prediction['sub_type']}";
+            $loseKey = $statKey;
+        }
+        
+        if (!isset($stats[$statKey])) {
+            $stats[$statKey] = ['wins' => 0, 'losses' => 0, 'profit' => 0];
         }
 
-        if (!isset($stats[$statKey])) {
-            $stats[$statKey] = ['wins' => 0, 'losses' => 0];
-        }
+        // 이전 lose 카운트를 기반으로 베팅 금액 결정
+        $last_lose_count = $loses[$loseKey] ?? 0;
+        $betAmount = $moneySteps[$last_lose_count] ?? 0;
 
         $isWin = ($predictedPos === $lastPos);
 
-        // ★★★ 이제 $history 변수가 정상적으로 인식됩니다. ★★★
-        if (!isset($history[$statKey])) {
-            $history[$statKey] = [];
-        }
-        $history[$statKey][] = $isWin ? 'W' : 'L'; // 'W' (Win), 'L' (Loss)
+        /*if (config('app.baccara_debug')) {
+            Log::debug('[Baccara][ROUND_CONTEXT]', [
+                'loseKey'          => $loseKey ?? null,
+                'last_lose_count'  => $last_lose_count,
+                'betAmount'        => $betAmount,
+                'predictedPos'     => $predictedPos ?? null,
+                'lastPos'          => $lastPos ?? null,
+                'isWin'            => $isWin,
+                'loses'            => $loses[$loseKey] ?? null,     // 해당 키만 확인
+                'moneySteps'       => $moneySteps ?? null,           // 필요 시 전체 계단
+            ]);
+        }*/
+        
+        if (!isset($history[$statKey])) $history[$statKey] = [];
+        $history[$statKey][] = $isWin ? 'W' : 'L';
 
         if ($isWin) {
             $stats[$statKey]['wins']++;
-            if (config('app.baccara_debug')) Log::debug(" [가상 통계] {$statKey}: 승리 (예측:{$predictedPos}, 실제:{$lastPos})");
+            $profitChange = $betAmount * 0.95;
+            $stats[$statKey]['profit'] += $profitChange;
+            if (config('app.baccara_debug')) {
+                Log::debug('[가상 통계][WIN]', [
+                    'statKey'      => $statKey,
+                    'isWin'        => $isWin,
+                    'betAmount'    => $betAmount,
+                    'profitChange' => $profitChange,
+                    'wins'         => $stats[$statKey]['wins'],
+                    'losses'       => $stats[$statKey]['losses'] ?? null,
+                    'profit'       => $stats[$statKey]['profit'],
+                ]);
+            }
         } else {
             $stats[$statKey]['losses']++;
-            if (config('app.baccara_debug')) Log::debug(" [가상 통계] {$statKey}: 패배 (예측:{$predictedPos}, 실제:{$lastPos})");
+            $profitChange = -$betAmount;
+            $stats[$statKey]['profit'] += $profitChange;
+            if (config('app.baccara_debug')) {
+                Log::debug('[가상 통계][LOSE]', [
+                    'statKey'      => $statKey,
+                    'isWin'        => $isWin,
+                    'betAmount'    => $betAmount,
+                    'profitChange' => $profitChange,
+                    'wins'         => $stats[$statKey]['wins'] ?? null,
+                    'losses'       => $stats[$statKey]['losses'],
+                    'profit'       => $stats[$statKey]['profit'],
+                ]);
+            }
         }
     }
     
@@ -189,6 +246,7 @@ class PredictionService
             // ★★★ lose 카운터를 기준으로 amount와 step을 계산합니다.
             $current_lose = $updated_info['lose'];
             $amount = $moneySteps[$current_lose] ?? 1000;
+            $lose_count = $updated_info['lose'];
 
             $allPredictions[] = [
                 "sub_type" => $pattern_info['name'],
@@ -196,6 +254,7 @@ class PredictionService
                 "step" => $current_lose + 1, // 단계는 lose + 1
                 "amount" => $amount,
                 "mae" => 0,
+                "lose_count" => $lose_count,
             ];
         }
 
@@ -357,12 +416,15 @@ class PredictionService
                 if (!is_array($moneySteps)) $moneySteps = [];
                 $amount = $moneySteps[$next_lose] ?? 1000; // '다음' lose 카운트에 맞는 금액
 
+                
+
                 $predictions[] = [
                     "sub_type" => sprintf("종합 예측 (%d/%d, %.1f%%)", $counts[$next_final_prediction], $pattern_count, $prediction_percentage),
                     "recommend" => $next_final_prediction,
                     "step" => $next_lose + 1, // '다음' 단계는 lose + 1
                     "amount" => $amount,
                     "mae" => 0,
+                    "lose_count" => $next_lose,
                 ];
             }
         }
@@ -451,7 +513,7 @@ class PredictionService
             $pred_3mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 2]) ? 'B' : 'P';
             $next_states['pred_3mae'] = $pred_3mae;
             $amount_3mae = $moneySteps[$next_lose_3mae] ?? 1000;
-            $allPredictions[] = [ "sub_type" => "3매", "recommend" => $pred_3mae, "step" => $next_lose_3mae + 1, "amount" => $amount_3mae, "mae" => 3 ];
+            $allPredictions[] = [ "sub_type" => "3매", "recommend" => $pred_3mae, "step" => $next_lose_3mae + 1, "amount" => $amount_3mae, "mae" => 3, "lose_count" => $next_lose_3mae ];
         }
         
         // 4매 예측
@@ -459,7 +521,7 @@ class PredictionService
             $pred_4mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 3]) ? 'B' : 'P';
             $next_states['pred_4mae'] = $pred_4mae;
             $amount_4mae = $moneySteps[$next_lose_4mae] ?? 1000;
-            $allPredictions[] = [ "sub_type" => "4매", "recommend" => $pred_4mae, "step" => $next_lose_4mae + 1, "amount" => $amount_4mae, "mae" => 4 ];
+            $allPredictions[] = [ "sub_type" => "4매", "recommend" => $pred_4mae, "step" => $next_lose_4mae + 1, "amount" => $amount_4mae, "mae" => 4, "lose_count" => $next_lose_4mae];
         }
 
         // 5매 예측
@@ -467,7 +529,7 @@ class PredictionService
             $pred_5mae = ($pb_string[$pb_len - 1] === $pb_string[$pb_len - 4]) ? 'B' : 'P';
             $next_states['pred_5mae'] = $pred_5mae;
             $amount_5mae = $moneySteps[$next_lose_5mae] ?? 1000;
-            $allPredictions[] = [ "sub_type" => "5매", "recommend" => $pred_5mae, "step" => $next_lose_5mae + 1, "amount" => $amount_5mae, "mae" => 5 ];
+            $allPredictions[] = [ "sub_type" => "5매", "recommend" => $pred_5mae, "step" => $next_lose_5mae + 1, "amount" => $amount_5mae, "mae" => 5, "lose_count" => $next_lose_5mae ];
         }
         if (config('app.baccara_debug')) Log::debug(" [logic4] [최종 예측 결과]: " . json_encode($allPredictions));
 
@@ -543,6 +605,7 @@ class PredictionService
 
             foreach ($patterndb as $p) {
                 if (($p['bettringround'] ?? 0) === ($slen + 1)) {
+                    $lose_count = $p['lose'] ?? 0;
                     $stepIndex = $p['lose'] ?? 0;
                     
                     $coininfo = $userDbState->coininfo;
@@ -553,7 +616,7 @@ class PredictionService
 
                     $allPredictions[] = [
                         'sub_type' => $p['bettingtype'], 'recommend' => $p['bettingpos'],
-                        'step' => $stepIndex + 1, 'amount' => $amount, 'mae' => $p['measu'],
+                        'step' => $stepIndex + 1, 'amount' => $amount, 'mae' => $p['measu'],'lose_count' => $lose_count,
                     ];
                 }
             }

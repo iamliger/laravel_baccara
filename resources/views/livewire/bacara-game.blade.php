@@ -91,7 +91,7 @@
                     class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm shadow">리셋</button>
                 
                 {{-- ★★★ '로그 복사' 버튼을 여기에 추가합니다. (기본적으로 숨김) ★★★ --}}
-                <button id="copy-log-btn"
+                <button wire:ignore id="copy-log-btn"
                     class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm shadow hidden">로그 복사</button>
             </div>
             <form method="POST" action="{{ route('logout') }}">
@@ -217,7 +217,9 @@
             let jokboHistory, moneyArrStep, consoleMessages, currentSettings;
             let aiPredictionTriggered = false;
             let isGameInProgress = false; 
-            let inlineChartInstance = null;           
+            let inlineChartInstance = null;
+            let renderQueue = [];
+            let isRendering = false;
 
             const $wire = @this;            
 
@@ -279,7 +281,7 @@
 
             // -----------------------------
             // Livewire 이벤트 수신
-            // -----------------------------            
+            // -----------------------------
 
             function loadSettings() {                
                 try {
@@ -456,8 +458,11 @@
             });
 
             Livewire.on('predictionUpdated', (predictionData) => {                
-                renderPrediction(predictionData);
-                logRecommendation(predictionData?.predictions, predictionData?.type);
+                //renderPrediction(predictionData);
+                //logRecommendation(predictionData?.predictions, predictionData?.type);
+                
+                renderQueue.push(predictionData);
+                processRenderQueue();
             });
 
             Livewire.on('showCoinInfoModal', () => openModal('moneystepinfo-modal'));
@@ -470,6 +475,26 @@
             // -----------------------------
             // 함수 정의 (이 부분은 변경사항 없음)
             // -----------------------------
+            function processRenderQueue() {
+                // 이미 다른 렌더링 작업이 실행 중이라면, 새로운 작업을 시작하지 않습니다.
+                // 현재 작업이 끝나면 루프에 의해 자동으로 다음 작업이 처리됩니다.
+                if (isRendering) return;
+
+                isRendering = true;
+
+                // 큐에 작업이 남아있는 동안 계속 실행합니다.
+                while (renderQueue.length > 0) {
+                    // 큐의 가장 앞에 있는 작업을 꺼냅니다 (First-In, First-Out).
+                    const dataToRender = renderQueue.shift();
+                    
+                    // 꺼내온 데이터를 사용하여 화면에 그리는 함수들을 호출합니다.
+                    renderPrediction(dataToRender);
+                    logRecommendation(dataToRender?.predictions, dataToRender?.type);
+                }
+                
+                isRendering = false; // 모든 작업이 끝나면 플래그를 해제합니다.
+            }
+
             function showToast(targetId, message, options = {}) {
                 const config = {
                     type: 'info', // 기본 타입
@@ -953,23 +978,23 @@
             }
 
             function bindEvents() {
-                if (el.playerBtn) el.playerBtn.onclick = () => {                    
+                if (el.playerBtn) el.playerBtn.onclick = () => {
                     addConsoleMessage('플레이어를 선택했습니다.', 'player');
-                    $wire.call('addResultRequest', 'P', getSelectedLogic(), currentSettings.chkvirtualbet);
-                    isGameInProgress = true;
+                    $wire.call('addResultRequest', 'P', getSelectedLogic(), currentSettings.chkvirtualbet);                    
                     // 차트가 보이는 상태일 때만 업데이트
                     if (el.viewToggleButton.dataset.currentView === 'chart') {
                         showOrUpdateChart();
                     }
+                    isGameInProgress = true;
                 };
                 if (el.bankerBtn) el.bankerBtn.onclick = () => {
                     addConsoleMessage('뱅커를 선택했습니다.', 'banker');
                     $wire.call('addResultRequest', 'B', getSelectedLogic(), currentSettings.chkvirtualbet);
-                    isGameInProgress = true;
                     // 차트가 보이는 상태일 때만 업데이트
                     if (el.viewToggleButton.dataset.currentView === 'chart') {
                         showOrUpdateChart();
                     }
+                    isGameInProgress = true;
                 };
                 if (el.undoBtn) el.undoBtn.onclick = () => {
                     addConsoleMessage('마지막 입력을 취소했습니다.', 'system');

@@ -517,9 +517,29 @@ html:not(.dark) .sidebar {
     box-shadow: 0 0 0 2px #4f46e5;
 }
 
+/* 1. 마이페이지 모달 박스의 기본 구조와 크기를 정의합니다. */
 #mypage-modal .modal-box {
-    max-width: 90%; /* 기존 28rem에서 46rem으로 확장 */
-    height: 80%;
+    width: 90%;      /* 너비를 화면의 90%로 설정 */
+    max-width: 48rem; /* 최대 너비를 768px로 제한 */
+    height: 85vh;     /* 높이를 화면 높이의 85%로 설정 */
+    max-height: 800px;/* 최대 높이를 800px로 제한 */
+
+    /* ★★★ 핵심: 내부 요소를 수직으로 배치하는 Flexbox 컨테이너로 만듭니다. ★★★ */
+    display: flex;
+    flex-direction: column;
+}
+
+/* 2. 마이페이지 모달의 '바디' 영역이 남는 공간을 모두 차지하고, 스크롤되도록 만듭니다. */
+#mypage-modal .modal-body {
+    flex-grow: 1; /* ★★★ 핵심: 헤더와 푸터를 제외한 모든 남는 공간을 차지합니다. */
+    overflow-y: auto; /* ★★★ 핵심: 내용이 길어지면 세로 스크롤바를 생성합니다. */
+    padding: 1.5rem; /* 내부 콘텐츠 여백 */
+}
+
+/* 3. 헤더와 푸터는 크기가 줄어들지 않도록 고정합니다. */
+#mypage-modal .modal-header,
+#mypage-modal .modal-footer {
+    flex-shrink: 0;
 }
 
 .setting-item {
@@ -673,8 +693,13 @@ html:not(.dark) .sidebar {
     }
 
     #mypage-modal .modal-box {
-        max-width: 95%; /* 모바일에서는 화면의 95% 사용 */
-        height: 80%;
-        margin: 0 1rem; /* 좌우 여백 추가 */
+        width: 95%;      /* 모바일에서는 너비를 95%로 설정 */
+        max-width: 100%; /* 최대 너비 제한 해제 */
+        height: 90vh;      /* 모바일에서는 높이를 90%로 설정 */
+        margin: 0;
+    }
+
+    #mypage-modal .modal-body {
+        padding: 1rem; /* 모바일에서는 내부 여백을 약간 줄입니다. */
     }
 }
